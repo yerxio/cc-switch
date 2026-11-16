@@ -53,6 +53,11 @@ export const handlers = [
     success(null),
   ),
   http.post(`${TAURI_ENDPOINT}/list_profiles`, () => success([])),
+  // 项目级作用域：默认没有受管项目，面板就停在全局作用域
+  http.post(`${TAURI_ENDPOINT}/list_scoped_projects`, () => success([])),
+  http.post(`${TAURI_ENDPOINT}/discover_scoped_project_candidates`, () =>
+    success([]),
+  ),
   http.post(`${TAURI_ENDPOINT}/get_providers`, async ({ request }) => {
     const { app } = await withJson<{ app: AppId }>(request);
     return success(getProviders(app));

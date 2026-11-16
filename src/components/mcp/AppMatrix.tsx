@@ -89,7 +89,12 @@ function useColumnTracking(app: AppId | undefined) {
 }
 
 // ─── 单元格 ─────────────────────────────────────────────────────────────
-export type MatrixCellState = "on" | "off" | "fail";
+/**
+ * `inherited`：项目级作用域专用——这一条在**全局**已经启用，项目里没有单独绑定。
+ * 画成淡色的勾（而不是空框），否则用户会以为没生效；点它才是在项目里再写一份，
+ * 那会按 Claude / Codex 的作用域规则整条覆盖全局那份。
+ */
+export type MatrixCellState = "on" | "off" | "fail" | "inherited";
 
 interface MatrixCellProps {
   state: MatrixCellState;
@@ -137,6 +142,8 @@ export function MatrixCell({
                 "border-action bg-action text-action-fg group-hover/cell:border-action-hover group-hover/cell:bg-action-hover",
               state === "off" &&
                 "border-border-strong bg-surface group-hover/cell:border-fg-3",
+              state === "inherited" &&
+                "border-dashed border-border-strong bg-surface text-fg-3 group-hover/cell:border-fg-3",
               state === "fail" &&
                 "border-warning bg-warning-soft text-warning-text",
             )}
@@ -147,7 +154,10 @@ export function MatrixCell({
               <Check
                 className={cn(
                   "h-3 w-3 transition-transform duration-[120ms] ease-out motion-reduce:transition-none",
-                  state === "on" ? "scale-100" : "scale-0",
+                  state === "on" || state === "inherited"
+                    ? "scale-100"
+                    : "scale-0",
+                  state === "inherited" && "opacity-60",
                 )}
                 strokeWidth={3}
               />

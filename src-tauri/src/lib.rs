@@ -1792,6 +1792,17 @@ pub fn run() {
             commands::open_cc_switch_skills_dir,
             commands::open_skill_dir,
             commands::search_skills_sh,
+            // 项目级作用域：把受管的 MCP / Skills 投影进单个仓库
+            commands::open_project_directory_dialog,
+            commands::list_scoped_projects,
+            commands::discover_scoped_project_candidates,
+            commands::add_scoped_project,
+            commands::rename_scoped_project,
+            commands::remove_scoped_project,
+            commands::get_project_scope_state,
+            commands::toggle_project_mcp,
+            commands::toggle_project_skill,
+            commands::resync_project_scope,
             // Skill management (legacy API compatibility)
             commands::get_skills,
             commands::get_skills_for_app,

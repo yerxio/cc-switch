@@ -9,6 +9,7 @@ use tauri::State;
 use super::run_db_task;
 use crate::app_config::AppType;
 use crate::claude_mcp;
+use crate::services::project_scope::ProjectScopeService;
 use crate::services::McpService;
 use crate::store::AppState;
 
@@ -112,6 +113,10 @@ pub async fn upsert_mcp_server(
 
 #[tauri::command]
 pub async fn delete_mcp_server(state: State<'_, AppState>, id: String) -> Result<bool, String> {
+    // 先撤项目级投影，再删 SSOT 行；失败只记日志，不挡住删除本身
+    if let Err(error) = ProjectScopeService::purge_item(&state.db, false, &id) {
+        log::warn!("删除 MCP {id} 时清理项目级投影失败: {error}");
+    }
     McpService::delete_server(&state, &id).map_err(|e| e.to_string())
 }
 

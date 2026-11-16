@@ -400,6 +400,34 @@ impl Database {
         )
         .map_err(|e| AppError::Database(e.to_string()))?;
 
+        // 20. 项目级作用域：受管项目目录 + 「项目 × 条目 × 应用」绑定
+        //     （与 profiles 不同：profiles 是全局状态快照、互斥切换；这里是按目录
+        //     并存生效的绑定，投影目标全在用户仓库内，不碰任何全局配置）
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS scoped_projects (
+                id TEXT PRIMARY KEY,
+                path TEXT NOT NULL UNIQUE,
+                name TEXT NOT NULL,
+                added_at INTEGER NOT NULL DEFAULT 0
+            )",
+            [],
+        )
+        .map_err(|e| AppError::Database(e.to_string()))?;
+
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS project_bindings (
+                project_id TEXT NOT NULL,
+                kind TEXT NOT NULL,
+                item_id TEXT NOT NULL,
+                app TEXT NOT NULL,
+                bound_at INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY (project_id, kind, item_id, app),
+                FOREIGN KEY (project_id) REFERENCES scoped_projects(id) ON DELETE CASCADE
+            )",
+            [],
+        )
+        .map_err(|e| AppError::Database(e.to_string()))?;
+
         // 修复跑过未发布开发版的库：current 标记曾是全局 key，现按应用分组
         // （随 v12 定稿为 current_profile_id_<scope>，不单独 bump 版本）
         if conn
@@ -726,6 +754,11 @@ impl Database {
                         }
                         Self::set_user_version(conn, 26)?;
                     }
+                    26 => {
+                        log::info!("迁移数据库从 v26 到 v27（项目级 MCP/Skills 绑定）");
+                        Self::migrate_v26_to_v27(conn)?;
+                        Self::set_user_version(conn, 27)?;
+                    }
                     _ => {
                         return Err(AppError::Database(format!(
                             "未知的数据库版本 {version}，无法迁移到 {SCHEMA_VERSION}"
@@ -749,6 +782,39 @@ impl Database {
                 Err(e)
             }
         }
+    }
+
+    /// v26 -> v27 迁移：项目级作用域的两张新表
+    ///
+    /// 只新建表，不碰 `mcp_servers` / `skills` 的任何列：全局开关仍是那些
+    /// `enabled_*` 列，项目级是独立的二维绑定（项目 × 条目 × 应用）。
+    fn migrate_v26_to_v27(conn: &Connection) -> Result<(), AppError> {
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS scoped_projects (
+                id TEXT PRIMARY KEY,
+                path TEXT NOT NULL UNIQUE,
+                name TEXT NOT NULL,
+                added_at INTEGER NOT NULL DEFAULT 0
+            )",
+            [],
+        )
+        .map_err(|e| AppError::Database(e.to_string()))?;
+
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS project_bindings (
+                project_id TEXT NOT NULL,
+                kind TEXT NOT NULL,
+                item_id TEXT NOT NULL,
+                app TEXT NOT NULL,
+                bound_at INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY (project_id, kind, item_id, app),
+                FOREIGN KEY (project_id) REFERENCES scoped_projects(id) ON DELETE CASCADE
+            )",
+            [],
+        )
+        .map_err(|e| AppError::Database(e.to_string()))?;
+
+        Ok(())
     }
 
     /// v0 -> v1 迁移：补齐所有缺失列

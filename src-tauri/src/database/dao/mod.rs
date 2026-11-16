@@ -6,6 +6,7 @@ pub mod custom_icons;
 pub mod failover;
 pub mod mcp;
 pub mod profiles;
+pub mod project_scope;
 pub mod prompts;
 pub mod providers;
 pub mod providers_seed;

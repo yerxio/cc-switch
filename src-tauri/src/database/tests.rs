@@ -1630,9 +1630,13 @@ fn migration_from_v24_adds_copilot_and_workbuddy_flags_without_changing_dsh_stat
     Database::set_user_version(&conn, 24).expect("set user_version=24");
 
     Database::apply_schema_migrations_on_conn(&conn).expect("upgrade v24 database");
-    // v24 → v25（Copilot）→ v26（WorkBuddy）
-    assert_eq!(Database::get_user_version(&conn).unwrap(), 26);
-    assert_eq!(SCHEMA_VERSION, 26);
+    // v24 → v25（Copilot）→ v26（WorkBuddy）→ v27（项目级绑定表）：这里关心的是
+    // 迁移链一路跑到当前版本，所以跟着 SCHEMA_VERSION 走，不再钉死某个数字。
+    assert_eq!(
+        Database::get_user_version(&conn).unwrap(),
+        SCHEMA_VERSION,
+        "迁移链必须一路跑到当前版本"
+    );
     for table in ["mcp_servers", "skills"] {
         let flags: (bool, bool, bool) = conn
             .query_row(
@@ -1651,6 +1655,45 @@ fn migration_from_v24_adds_copilot_and_workbuddy_flags_without_changing_dsh_stat
         .query_row("SELECT enabled_copilot FROM skills", [], |row| row
             .get::<_, bool>(0))
         .unwrap());
+}
+
+#[test]
+fn migration_from_v26_adds_the_project_scope_tables() {
+    let conn = Connection::open_in_memory().expect("open memory db");
+    Database::create_tables_on_conn(&conn).expect("create tables");
+    // 回到 v26 的形态：那时还没有项目级作用域的两张表
+    conn.execute_batch(
+        "DROP TABLE project_bindings;
+         DROP TABLE scoped_projects;
+         INSERT INTO mcp_servers (id, name, server_config, enabled_claude)
+         VALUES ('shared', 'Shared MCP', '{}', 1);",
+    )
+    .expect("seed v26 database");
+    Database::set_user_version(&conn, 26).expect("set user_version=26");
+
+    Database::apply_schema_migrations_on_conn(&conn).expect("upgrade v26 database");
+
+    assert_eq!(Database::get_user_version(&conn).unwrap(), SCHEMA_VERSION);
+    for table in ["scoped_projects", "project_bindings"] {
+        let count: i64 = conn
+            .query_row(
+                "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = ?1",
+                [table],
+                |row| row.get(0),
+            )
+            .expect("query sqlite_master");
+        assert_eq!(count, 1, "{table} 应由 v27 迁移建出来");
+    }
+
+    // 项目级是独立的二维绑定，全局开关列不该被这次迁移碰到
+    assert!(conn
+        .query_row("SELECT enabled_claude FROM mcp_servers", [], |row| row
+            .get::<_, bool>(0))
+        .expect("read global flag"));
+
+    // 重复跑一次仍然成立（CREATE TABLE IF NOT EXISTS 的幂等性）
+    Database::apply_schema_migrations_on_conn(&conn).expect("re-run migrations");
+    assert_eq!(Database::get_user_version(&conn).unwrap(), SCHEMA_VERSION);
 }
 
 #[test]

@@ -3088,6 +3088,55 @@ impl SkillService {
         Ok(())
     }
 
+    /// 把 SSOT 里的一个 Skill 目录投影到**任意目标目录**（项目级作用域用）。
+    ///
+    /// 与 [`Self::sync_to_app_dir`] 的两点不同：
+    /// 1. 目标目录由调用方给出，不经过 [`Self::get_app_skills_dir`]；
+    /// 2. **固定用复制**，不看 `skill_sync_method` 设置。项目级目标在用户仓库里，
+    ///    符号链接会带上本机绝对路径——提交后对队友是坏链，Windows 上 git 默认
+    ///    也还原不出符号链接，而 `.claude/skills` / `.agents/skills` 本来就是
+    ///    设计成提交进版本库共享的。
+    pub fn sync_directory_into(directory: &str, dest_dir: &Path) -> Result<()> {
+        let directory = Self::require_valid_directory(directory)?;
+        let ssot_dir = Self::get_ssot_dir()?;
+        let source = ssot_dir.join(&directory);
+        Self::validate_sync_source_dir(&source, &directory)?;
+
+        // 目标落在 SSOT 内部会让「复制」变成自我覆盖（例如有人把仓库设成了
+        // SSOT 目录的父目录）。宁可报错也不动手。
+        if Self::paths_overlap(&ssot_dir, dest_dir) {
+            return Err(anyhow!(
+                "目标目录与 Skill 存储目录重叠，拒绝同步: {}",
+                dest_dir.display()
+            ));
+        }
+
+        fs::create_dir_all(dest_dir)?;
+        let dest = dest_dir.join(&directory);
+        Self::replace_dest_with_copy(&source, &dest, &directory)?;
+        log::debug!("Skill {directory} 已复制到 {}", dest.display());
+        Ok(())
+    }
+
+    /// 从任意目标目录撤掉一个 Skill 目录。
+    ///
+    /// 撤完若目标目录空了就把它也删掉：git 不跟踪空目录，留着只是在用户仓库里
+    /// 积垢。只删空目录，永远不递归删上层。
+    pub fn remove_directory_from(directory: &str, dest_dir: &Path) -> Result<()> {
+        let directory = Self::require_valid_directory(directory)?;
+        let dest = dest_dir.join(&directory);
+        if dest.exists() || Self::is_symlink(&dest) {
+            Self::remove_path(&dest)?;
+            log::debug!("Skill {directory} 已从 {} 移除", dest_dir.display());
+        }
+        if let Ok(mut entries) = fs::read_dir(dest_dir) {
+            if entries.next().is_none() {
+                let _ = fs::remove_dir(dest_dir);
+            }
+        }
+        Ok(())
+    }
+
     /// 删除路径（支持 symlink 和真实目录）
     fn remove_path(path: &Path) -> Result<()> {
         if Self::is_symlink(path) {

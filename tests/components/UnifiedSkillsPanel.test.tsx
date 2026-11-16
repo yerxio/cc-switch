@@ -36,6 +36,13 @@ const m = vi.hoisted(() => ({
   repoFailures: [] as SkillRepoFailure[],
   checking: false,
   visibleApps: ["claude", "codex", "pi"] as string[],
+  // 项目级作用域
+  scopedProjects: [] as Array<Record<string, unknown>>,
+  scopeProjectId: null as string | null,
+  projectScopeState: undefined as Record<string, unknown> | undefined,
+  selectScope: vi.fn(),
+  toggleProjectSkill: vi.fn(),
+  resyncProject: vi.fn(),
 }));
 
 vi.mock("sonner", () => ({
@@ -125,6 +132,31 @@ vi.mock("@/hooks/useSkills", () => ({
   useInstallSkill: () => ({ mutateAsync: vi.fn() }),
 }));
 
+vi.mock("@/hooks/useProjectScope", () => ({
+  useScopedProjects: () => ({ data: m.scopedProjects }),
+  useSelectedProjectScope: () => ({
+    projectId: m.scopeProjectId,
+    select: m.selectScope,
+  }),
+  useProjectCandidates: () => ({ data: [] }),
+  useAddScopedProject: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useRemoveScopedProject: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useProjectScopeState: () => ({
+    data: m.projectScopeState,
+    isLoading: false,
+    isError: false,
+  }),
+  useToggleProjectMcp: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useToggleProjectSkill: () => ({
+    mutateAsync: m.toggleProjectSkill,
+    isPending: false,
+  }),
+  useResyncProjectScope: () => ({
+    mutateAsync: m.resyncProject,
+    isPending: false,
+  }),
+}));
+
 type Overrides = Omit<Partial<InstalledSkill>, "apps"> & {
   apps?: Partial<InstalledSkill["apps"]>;
 };
@@ -200,6 +232,12 @@ describe("UnifiedSkillsPanel", () => {
       .mockResolvedValue({ data: { updates: [], failures: [] } });
     m.installFromZip.mockReset();
     m.resync.mockReset().mockResolvedValue([]);
+    m.scopedProjects = [];
+    m.scopeProjectId = null;
+    m.projectScopeState = undefined;
+    m.selectScope.mockReset();
+    m.toggleProjectSkill.mockReset().mockResolvedValue(undefined);
+    m.resyncProject.mockReset().mockResolvedValue({ applied: 0, failures: [] });
     m.updateSkill
       .mockReset()
       .mockImplementation(async (id: string) => makeSkill({ id }));
@@ -1082,4 +1120,117 @@ describe("UnifiedSkillsPanel", () => {
     expect(m.toastError).not.toHaveBeenCalled();
     consoleErrorSpy.mockRestore();
   });
+
+  it("writes a Skill into the selected project instead of the global scope", async () => {
+    m.installed = [makeSkill()];
+    m.scopedProjects = [
+      {
+        id: "p1",
+        path: "/repos/api",
+        name: "api",
+        addedAt: 0,
+        exists: true,
+      },
+    ];
+    m.scopeProjectId = "p1";
+    m.projectScopeState = {
+      project: {
+        id: "p1",
+        path: "/repos/api",
+        name: "api",
+        addedAt: 0,
+        exists: true,
+      },
+      mcp: [],
+      skills: [
+        {
+          id: "owner/repo:alpha-skill",
+          name: "Alpha Skill",
+          // 全局给 Claude 开着、项目里没绑 → 继承态；Codex 两边都没有
+          claude: { bound: false, global: true, foreign: false },
+          codex: { bound: false, global: false, foreign: false },
+        },
+      ],
+      codexTrust: "trusted",
+      foreign: [],
+      targets: {
+        claudeMcp: ".mcp.json",
+        claudeApproval: ".claude/settings.local.json",
+        claudeSkills: ".claude/skills/",
+        codexMcp: ".codex/config.toml",
+        codexSkills: ".agents/skills/",
+      },
+    };
+    renderPanel();
+
+    // 勾 Codex 那一格：走项目级 mutation，而不是全局的 toggleSkillApp
+    await userEvent.click(
+      screen.getByRole("button", { name: /projectScope.cellOff/ }),
+    );
+    await waitFor(() =>
+      expect(m.toggleProjectSkill).toHaveBeenCalledWith({
+        projectId: "p1",
+        skillId: "owner/repo:alpha-skill",
+        app: "codex",
+        enabled: true,
+      }),
+    );
+    expect(m.toggle).not.toHaveBeenCalled();
+
+    // 全局已启用的那格画成继承态，而不是空框——否则用户会以为没生效
+    expect(
+      screen.getByRole("button", { name: /projectScope.cellInherited/ }),
+    ).toHaveAttribute("data-state", "inherited");
+  });
+
+  it("refuses to overwrite a project entry CC Switch did not write", async () => {
+    m.installed = [makeSkill()];
+    m.scopedProjects = [
+      { id: "p1", path: "/repos/api", name: "api", addedAt: 0, exists: true },
+    ];
+    m.scopeProjectId = "p1";
+    m.projectScopeState = {
+      project: {
+        id: "p1",
+        path: "/repos/api",
+        name: "api",
+        addedAt: 0,
+        exists: true,
+      },
+      mcp: [],
+      skills: [
+        {
+          id: "owner/repo:alpha-skill",
+          name: "Alpha Skill",
+          claude: { bound: false, global: false, foreign: true },
+          codex: { bound: false, global: false, foreign: false },
+        },
+      ],
+      codexTrust: "untrusted",
+      foreign: [{ kind: "skill", app: "claude", key: "alpha-skill" }],
+      targets: {
+        claudeMcp: ".mcp.json",
+        claudeApproval: ".claude/settings.local.json",
+        claudeSkills: ".claude/skills/",
+        codexMcp: ".codex/config.toml",
+        codexSkills: ".agents/skills/",
+      },
+    };
+    renderPanel();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: /projectScope.cellForeign/ }),
+    );
+    await waitFor(() =>
+      expect(m.toastWarning).toHaveBeenCalledWith(
+        "projectScope.foreignBlockedTitle",
+        expect.objectContaining({
+          description: "projectScope.foreignBlockedBody",
+        }),
+      ),
+    );
+    // 仓库里那条不是我们写的，一个字节都不许动
+    expect(m.toggleProjectSkill).not.toHaveBeenCalled();
+  });
+
 });

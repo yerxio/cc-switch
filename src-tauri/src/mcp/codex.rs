@@ -633,7 +633,7 @@ const NON_CODEX_SERVER_FIELDS: &[&str] = &["timeout", "autoApprove"];
 
 /// Codex 专用的 JSON → TOML 转换：在通用转换的基础上去掉 Codex 不认的字段。
 /// Grok Build 复用通用转换，不受影响。
-fn json_server_to_codex_toml_table(spec: &Value) -> Result<toml_edit::Table, AppError> {
+pub(crate) fn json_server_to_codex_toml_table(spec: &Value) -> Result<toml_edit::Table, AppError> {
     let mut table = json_server_to_toml_table(spec)?;
     for key in NON_CODEX_SERVER_FIELDS {
         table.remove(key);

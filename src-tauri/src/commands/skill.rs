@@ -7,6 +7,7 @@
 use super::run_db_task;
 use crate::app_config::{AppType, InstalledSkill, UnmanagedSkill};
 use crate::error::format_skill_error;
+use crate::services::project_scope::ProjectScopeService;
 use crate::services::skill::{
     DiscoverableSkill, ImportSkillSelection, MigrationResult, Skill, SkillAppSyncOutcome,
     SkillBackupEntry, SkillDiscoveryResult, SkillRepo, SkillService, SkillStorageLocation,
@@ -93,6 +94,11 @@ pub async fn uninstall_skill_unified(
     app_state: State<'_, AppState>,
 ) -> Result<SkillUninstallResult, String> {
     run_db_task(&app_state, move |state| {
+        // 先撤项目级投影：撤销要靠 skills 表里的目录名，删行之后就查不到了。
+        // 失败只记日志——不能因为某个仓库没权限写就让用户卸不掉这个 Skill。
+        if let Err(error) = ProjectScopeService::purge_item(&state.db, true, &id) {
+            log::warn!("卸载 Skill {id} 时清理项目级投影失败: {error}");
+        }
         SkillService::uninstall(&state.db, &id).map_err(|e| e.to_string())
     })
     .await
