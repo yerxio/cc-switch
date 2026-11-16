@@ -3642,7 +3642,10 @@
       "skippedTitle": "Atlandı {{count}} Becerileri: klasör adı zaten kullanılıyor",
       "allSkipped": "Hiçbir şey yüklü değil: ZIP'teki tüm {{count}} Becerileri önceden alınmış klasör adlarını kullanır",
       "skippedItem": "{{directory}} ({{name}} tarafından kullanılır)",
-      "skippedBody": "{{list}}. ZIP'teki sürümü kullanmak için önce aynı adı taşıyan Skill'i kaldırın."
+      "skippedBody": "{{list}}. ZIP'teki sürümü kullanmak için önce aynı adı taşıyan Skill'i kaldırın.",
+      "importedSingle": "{{name}} Skill'i CC Switch'e aktarıldı",
+      "importedMultiple": "{{count}} Skill CC Switch'e aktarıldı",
+      "importedHint": "Henüz hiçbir uygulamada etkin değil. Eşitlenecek uygulamaları \"Yüklü\" listesinden seçin."
     },
     "backToInstalled": "Kuruluma geri dön",
     "moreActions": "Daha fazla Beceri eylemi",
@@ -5019,7 +5022,7 @@
       "many": "{{first}} ve {{count}} daha fazla",
       "title": "Yükledikten sonra bu uygulamalarda etkinleştirin",
       "helpTitle": "Bu hatırlanıyor mu?",
-      "help": "Evet, son seçiminiz varsayılandır. Bunu istediğiniz zaman Yüklendi altında değiştirebilirsiniz. ZIP'ten yüklemek ve yedeklemeden geri yüklemek için de bu seçeneği kullanın."
+      "help": "Evet, son seçiminiz varsayılandır. Bunu istediğiniz zaman Yüklendi altında değiştirebilirsiniz. Yedeklemeden geri yüklemek için de bu seçenek kullanılır; ZIP'ten yüklemek yalnızca CC Switch'e aktarır ve hiçbir uygulamayı etkinleştirmez."
     },
     "discover": {
       "searchPlaceholder": "Ad, açıklama veya repoyu arayın",

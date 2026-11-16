@@ -3708,7 +3708,10 @@
       "skippedTitle": "跳过了 {{count}} 个 Skill：目录名已被占用",
       "allSkipped": "没有安装：ZIP 里的 {{count}} 个 Skill 目录名都已被占用",
       "skippedItem": "{{directory}}（已被 {{name}} 使用）",
-      "skippedBody": "{{list}}。要换成 ZIP 里的版本，先卸载同名的 Skill 再安装。"
+      "skippedBody": "{{list}}。要换成 ZIP 里的版本，先卸载同名的 Skill 再安装。",
+      "importedSingle": "Skill {{name}} 已导入 CC Switch",
+      "importedMultiple": "已导入 {{count}} 个 Skill 到 CC Switch",
+      "importedHint": "尚未启用到任何应用。在「已安装」列表里勾选要同步到的应用。"
     },
     "backToInstalled": "返回已安装",
     "moreActions": "Skills 的更多操作",
@@ -5085,7 +5088,7 @@
       "many": "{{first}} 等 {{count}} 个",
       "title": "安装后在这些应用里启用",
       "helpTitle": "选好的应用会记住吗",
-      "help": "会，默认用你上次的选择。装好后也能在「已安装」里随时调整。从 ZIP 安装和从备份恢复也用这里的选择。"
+      "help": "会，默认用你上次的选择。装好后也能在「已安装」里随时调整。从备份恢复也用这里的选择；从 ZIP 安装只导入到 CC Switch，不启用任何应用。"
     },
     "discover": {
       "searchPlaceholder": "搜索名称、描述或仓库",

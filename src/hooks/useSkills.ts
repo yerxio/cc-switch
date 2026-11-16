@@ -481,7 +481,8 @@ export function useInstallSkillsFromZip() {
       currentApp,
     }: {
       filePath: string;
-      currentApp: AppId;
+      /** 省略 = 只导入到 CC Switch，不写入任何应用目录 */
+      currentApp?: AppId;
     }) => skillsApi.installFromZip(filePath, currentApp),
     onSuccess: (result) => {
       queryClient.setQueryData<InstalledSkill[]>(

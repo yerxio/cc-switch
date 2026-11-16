@@ -3708,7 +3708,10 @@
       "skippedTitle": "Skipped {{count}} Skills: folder name already in use",
       "allSkipped": "Nothing installed: all {{count}} Skills in the ZIP use folder names that are already taken",
       "skippedItem": "{{directory}} (used by {{name}})",
-      "skippedBody": "{{list}}. To use the version in the ZIP, uninstall the Skill with the same name first."
+      "skippedBody": "{{list}}. To use the version in the ZIP, uninstall the Skill with the same name first.",
+      "importedSingle": "Skill {{name}} imported into CC Switch",
+      "importedMultiple": "Imported {{count}} Skills into CC Switch",
+      "importedHint": "Not enabled for any app yet. Pick the apps to sync it to in the installed list."
     },
     "backToInstalled": "Back to installed",
     "moreActions": "More Skills actions",
@@ -5085,7 +5088,7 @@
       "many": "{{first}} and {{count}} more",
       "title": "Enable in these apps after installing",
       "helpTitle": "Is this remembered?",
-      "help": "Yes, your last choice is the default. You can change it any time under Installed. Installing from ZIP and restoring from backup use this choice too."
+      "help": "Yes, your last choice is the default. You can change it any time under Installed. Restoring from backup uses this choice too; installing from ZIP only imports into CC Switch and enables no app."
     },
     "discover": {
       "searchPlaceholder": "Search name, description or repo",

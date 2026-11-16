@@ -3708,7 +3708,10 @@
       "skippedTitle": "{{count}} Skills übersprungen: Ordnername bereits vergeben",
       "allSkipped": "Nichts installiert: Alle {{count}} Skills in der ZIP verwenden bereits vergebene Ordnernamen",
       "skippedItem": "{{directory}} (belegt von {{name}})",
-      "skippedBody": "{{list}}. Um die Version aus der ZIP zu verwenden, deinstallieren Sie zuerst den gleichnamigen Skill."
+      "skippedBody": "{{list}}. Um die Version aus der ZIP zu verwenden, deinstallieren Sie zuerst den gleichnamigen Skill.",
+      "importedSingle": "Skill {{name}} in CC Switch importiert",
+      "importedMultiple": "{{count}} Skills in CC Switch importiert",
+      "importedHint": "Noch für keine App aktiviert. Wählen Sie in der Liste der installierten Skills die Apps zum Synchronisieren aus."
     },
     "backToInstalled": "Zurück zu Installiert",
     "moreActions": "Weitere Skills-Aktionen",
@@ -5085,7 +5088,7 @@
       "many": "{{first}} und {{count}} weitere",
       "title": "Nach der Installation in diesen Apps aktivieren",
       "helpTitle": "Wird das gespeichert?",
-      "help": "Ja, Ihre letzte Auswahl ist der Standard. Sie können sie jederzeit unter „Installiert“ ändern. Auch die Installation aus ZIP und die Wiederherstellung aus einer Sicherung verwenden diese Auswahl."
+      "help": "Ja, Ihre letzte Auswahl ist der Standard. Sie können sie jederzeit unter „Installiert“ ändern. Auch die Wiederherstellung aus einer Sicherung verwendet diese Auswahl. Die Installation aus ZIP importiert nur in CC Switch und aktiviert keine App."
     },
     "discover": {
       "searchPlaceholder": "Name, Beschreibung oder Repo suchen",

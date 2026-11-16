@@ -372,10 +372,15 @@ export const skillsApi = {
     return await invoke("open_zip_file_dialog");
   },
 
-  /** 从 ZIP 文件安装 Skills */
+  /**
+   * 从 ZIP 文件导入 Skills。
+   *
+   * 省略 `currentApp` 只导入到 CC Switch（落 SSOT + 入库），不写入任何应用目录；
+   * 传入则额外启用并同步到该应用。
+   */
   async installFromZip(
     filePath: string,
-    currentApp: AppId,
+    currentApp?: AppId,
   ): Promise<ZipInstallResult> {
     return await invoke("install_skills_from_zip", { filePath, currentApp });
   },

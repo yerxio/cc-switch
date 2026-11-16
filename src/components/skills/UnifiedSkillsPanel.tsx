@@ -75,7 +75,6 @@ import { SkillsStorageSheet } from "./SkillsStorageSheet";
 import { useSkillsResync } from "./useSkillsResync";
 import { useSkillInstallTargets } from "./useSkillInstallTargets";
 import { describeRepoFailures } from "./repoFailures";
-import type { ZipSkippedSkill } from "@/lib/api/skills";
 import { APP_IDS_WITH } from "@/config/appSpecs";
 
 const BACKUP_DIR = "~/.cc-switch/skill-backups";
@@ -727,14 +726,10 @@ const UnifiedSkillsPanel: React.FC<UnifiedSkillsPanelProps> = ({
     try {
       const filePath = await skillsApi.openZipFileDialog();
       if (!filePath) return;
-      let skipped: ZipSkippedSkill[] = [];
-      const { installed, failures } = await installTo(async (firstApp) => {
-        const result = await installFromZipMutation.mutateAsync({
-          filePath,
-          currentApp: firstApp,
-        });
-        skipped = result.skipped;
-        return result.installed;
+      // 只导入到 CC Switch：不传 currentApp，落 SSOT + 入库，不写任何应用目录。
+      // 启用交给用户在「已安装」矩阵里按 Skill 决定，所以这里不走 installTo。
+      const { installed, skipped } = await installFromZipMutation.mutateAsync({
+        filePath,
       });
       if (skipped.length > 0) {
         // #3749：同名被跳过要说清楚跳过了哪些、被谁占用，不能说成「ZIP 里没有技能」
@@ -766,22 +761,25 @@ const UnifiedSkillsPanel: React.FC<UnifiedSkillsPanelProps> = ({
         }
       } else if (installed.length === 1) {
         toast.success(
-          t("skillsPage.toast.installed", {
+          t("skills.installFromZip.importedSingle", {
             name: installed[0].name,
-            apps: names(targets),
           }),
-          { closeButton: true },
+          {
+            description: t("skills.installFromZip.importedHint"),
+            closeButton: true,
+          },
         );
       } else {
         toast.success(
-          t("skillsPage.toast.installedMany", {
+          t("skills.installFromZip.importedMultiple", {
             count: installed.length,
-            apps: names(targets),
           }),
-          { closeButton: true },
+          {
+            description: t("skills.installFromZip.importedHint"),
+            closeButton: true,
+          },
         );
       }
-      reportEnableFailures(failures);
     } catch (error) {
       toast.error(t("skills.installFailed"), { description: String(error) });
     } finally {

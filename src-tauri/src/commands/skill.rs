@@ -443,16 +443,20 @@ pub async fn remove_skill_repo(
 }
 
 /// 从 ZIP 文件安装 Skills；目录名已被占用的如实列在 `skipped` 里（#3749）
+///
+/// 省略 `current_app` 则只导入到 CC Switch（落 SSOT + 入库），不启用也不写入
+/// 任何应用目录——这是界面上「从 ZIP 安装」的默认行为。
 #[tauri::command]
 pub async fn install_skills_from_zip(
     file_path: String,
-    current_app: String,
+    current_app: Option<String>,
     app_state: State<'_, AppState>,
 ) -> Result<ZipInstallResult, String> {
-    let app_type = parse_app_type(&current_app)?;
+    let app_type = current_app.as_deref().map(parse_app_type).transpose()?;
     run_db_task(&app_state, move |state| {
         let path = std::path::Path::new(&file_path);
-        SkillService::install_from_zip(&state.db, path, &app_type).map_err(|e| e.to_string())
+        SkillService::install_from_zip(&state.db, path, app_type.as_ref())
+            .map_err(|e| e.to_string())
     })
     .await
 }

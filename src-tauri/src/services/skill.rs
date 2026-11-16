@@ -4712,11 +4712,15 @@ impl SkillService {
     /// 1. 解压 ZIP 到临时目录
     /// 2. 扫描目录查找包含 SKILL.md 的技能
     /// 3. 复制到 SSOT 并保存到数据库
-    /// 4. 同步到当前应用目录
+    /// 4. `current_app` 为 `Some` 时同步到该应用目录
+    ///
+    /// `current_app` 为 `None`（界面上「从 ZIP 安装」的默认行为）时只入库：
+    /// 落 SSOT、写数据库行，所有应用开关为关，不碰任何应用目录。之后由用户在
+    /// 「已安装」矩阵里逐个启用，走 [`Self::toggle_app`] 投影。
     pub fn install_from_zip(
         db: &Arc<Database>,
         zip_path: &Path,
-        current_app: &AppType,
+        current_app: Option<&AppType>,
     ) -> Result<ZipInstallResult> {
         // 解压到临时目录
         let temp_guard = Self::extract_local_zip(zip_path)?;
@@ -4818,7 +4822,10 @@ impl SkillService {
                 None => (install_name.clone(), None),
             };
 
-            Self::preflight_install_destination(&skill_dir, &install_name, current_app)?;
+            // 只入库时不碰应用目录，没有目标可预检。
+            if let Some(app) = current_app {
+                Self::preflight_install_destination(&skill_dir, &install_name, app)?;
+            }
 
             // 复制到 SSOT
             let dest = ssot_dir.join(&install_name);
@@ -4840,19 +4847,27 @@ impl SkillService {
                 repo_name: None,
                 repo_branch: None,
                 readme_url: None,
-                apps: SkillApps::only(current_app),
+                apps: current_app.map(SkillApps::only).unwrap_or_default(),
                 installed_at: chrono::Utc::now().timestamp(),
                 content_hash,
                 updated_at: 0,
             };
 
-            Self::persist_and_sync_new_skill(db, &skill, current_app)?;
+            match current_app {
+                Some(app) => Self::persist_and_sync_new_skill(db, &skill, app)?,
+                None => db.save_skill(&skill)?,
+            }
 
-            log::info!(
-                "Skill {} installed from ZIP, enabled for {:?}",
-                skill.name,
-                current_app
-            );
+            match current_app {
+                Some(app) => log::info!(
+                    "Skill {} installed from ZIP, enabled for {app:?}",
+                    skill.name
+                ),
+                None => log::info!(
+                    "Skill {} imported from ZIP into the CC Switch store only",
+                    skill.name
+                ),
+            }
             installed.push(skill);
         }
 
@@ -8688,7 +8703,7 @@ mod tests {
         let zip_path = home.path().join("team.zip");
         fs::write(&zip_path, build_skills_zip(&["My-Helper", "fresh"])).expect("write zip");
 
-        let result = SkillService::install_from_zip(&db, &zip_path, &AppType::Claude)
+        let result = SkillService::install_from_zip(&db, &zip_path, Some(&AppType::Claude))
             .expect("install from zip");
 
         assert_eq!(
@@ -8711,11 +8726,60 @@ mod tests {
         // 全部同名：不再报错，安装列表为空、跳过列表如实给出
         let only_taken = home.path().join("taken.zip");
         fs::write(&only_taken, build_skills_zip(&["fresh"])).expect("write zip");
-        let result = SkillService::install_from_zip(&db, &only_taken, &AppType::Claude)
+        let result = SkillService::install_from_zip(&db, &only_taken, Some(&AppType::Claude))
             .expect("all-skipped ZIP is not an error");
         assert!(result.installed.is_empty());
         assert_eq!(result.skipped.len(), 1);
         assert_eq!(result.skipped[0].existing_id, "local:fresh");
+    }
+
+    /// `current_app: None`（界面「从 ZIP 安装」的默认行为）只入库：落 SSOT、
+    /// 所有应用开关为关、任何应用目录都不碰。
+    #[test]
+    #[serial_test::serial]
+    fn install_from_zip_without_an_app_imports_into_the_store_only() {
+        let home = tempdir().expect("home");
+        let _home = TestHomeGuard::set(home.path());
+        let db = Arc::new(Database::memory().expect("memory db"));
+
+        let zip_path = home.path().join("team.zip");
+        fs::write(&zip_path, build_skills_zip(&["fresh"])).expect("write zip");
+
+        let result = SkillService::install_from_zip(&db, &zip_path, None).expect("zip import");
+
+        assert!(result.skipped.is_empty());
+        assert_eq!(result.installed.len(), 1);
+        let skill = &result.installed[0];
+        assert_eq!(skill.directory, "fresh");
+        assert_eq!(skill.id, "local:fresh");
+        // 一个应用都没启用
+        assert_eq!(skill.apps, SkillApps::default());
+        for app in AppType::all() {
+            assert!(
+                !skill.apps.is_enabled_for(&app),
+                "{app:?} must not be enabled by an import-only ZIP install"
+            );
+        }
+
+        // 落进了 SSOT
+        let ssot_dir = SkillService::get_ssot_dir().expect("ssot dir");
+        assert!(ssot_dir.join("fresh").join("SKILL.md").is_file());
+
+        // 入库了，且库里的开关同样全关
+        let saved = db.get_all_installed_skills().expect("read back skills");
+        assert_eq!(saved.len(), 1);
+        assert_eq!(saved["local:fresh"].apps, SkillApps::default());
+
+        // 没有任何应用目录被创建
+        for app in AppType::all() {
+            if let Ok(app_dir) = SkillService::get_app_skills_dir(&app) {
+                assert!(
+                    !app_dir.join("fresh").exists(),
+                    "{app:?} skills dir must stay untouched: {}",
+                    app_dir.display()
+                );
+            }
+        }
     }
 
     #[test]

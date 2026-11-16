@@ -921,6 +921,38 @@ describe("UnifiedSkillsPanel", () => {
     dialog.mockRestore();
   });
 
+  it("imports ZIP Skills into CC Switch only, without enabling any app", async () => {
+    const dialog = vi
+      .spyOn(skillsApi, "openZipFileDialog")
+      .mockResolvedValue("/tmp/team.zip");
+    m.installFromZip.mockResolvedValueOnce({
+      installed: [makeSkill({ id: "local:alpha-skill" })],
+      skipped: [],
+    });
+    renderPanel();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: /skillsPage.add/ }),
+    );
+    await userEvent.click(
+      await screen.findByRole("menuitem", { name: "skillsPage.addMenu.zip" }),
+    );
+
+    await waitFor(() =>
+      expect(m.toastSuccess).toHaveBeenCalledWith(
+        "skills.installFromZip.importedSingle",
+        expect.objectContaining({
+          description: "skills.installFromZip.importedHint",
+        }),
+      ),
+    );
+    // 不带 currentApp：后端只落 SSOT + 入库，不写任何应用目录
+    expect(m.installFromZip).toHaveBeenCalledWith({ filePath: "/tmp/team.zip" });
+    // 也不得在前端补启用（原来 installTo 会逐个 toggle 其余目标应用）
+    expect(m.toggle).not.toHaveBeenCalled();
+    dialog.mockRestore();
+  });
+
   it("blocks actions but not navigation while checking updates", async () => {
     m.installed = [makeSkill()];
     m.checking = true;
