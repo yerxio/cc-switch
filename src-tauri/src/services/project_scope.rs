@@ -784,9 +784,16 @@ impl ProjectScopeService {
         match app {
             ProjectApp::Claude => {
                 remove_claude_project_mcp(root, id)?;
-                unapprove_claude_project_mcp(root, id)
+                unapprove_claude_project_mcp(root, id)?;
+                // 预批准文件删掉后 `.claude/` 可能空了，它是我们建的，一并收走
+                prune_empty_dirs_up_to(root, claude_approval_path(root).parent().unwrap_or(root));
+                Ok(())
             }
-            ProjectApp::Codex => remove_codex_project_mcp(root, id),
+            ProjectApp::Codex => {
+                remove_codex_project_mcp(root, id)?;
+                prune_empty_dirs_up_to(root, codex_config_path(root).parent().unwrap_or(root));
+                Ok(())
+            }
         }
     }
 
@@ -803,7 +810,11 @@ impl ProjectScopeService {
         };
         let dest_dir = skills_dir_for(root, app);
         SkillService::remove_directory_from(&skill.directory, &dest_dir)
-            .map_err(|e| AppError::Config(e.to_string()))
+            .map_err(|e| AppError::Config(e.to_string()))?;
+        // remove_directory_from 只收走空的 skills 目录；`.claude/`、`.agents/`
+        // 这层也是我们建的，空了就别留在人家仓库里
+        prune_empty_dirs_up_to(root, &dest_dir);
+        Ok(())
     }
 }
 
@@ -844,6 +855,32 @@ fn write_json_object(path: &Path, map: &Map<String, Value>) -> Result<(), AppErr
     let text = serde_json::to_string_pretty(&Value::Object(map.clone()))
         .map_err(|source| AppError::JsonSerialize { source })?;
     crate::config::write_text_file(path, &format!("{text}\n"))
+}
+
+/// 从 `start` 往上逐层删掉**空**目录，直到 `root`（不含）为止。
+///
+/// 撤销要连我们建出来的 `.claude/`、`.codex/`、`.agents/` 一起收走：只删空目录，
+/// 所以用户原本就有内容的 `.claude/` 不会被碰。git 不跟踪空目录，留着纯属在
+/// 别人仓库里积垢。
+fn prune_empty_dirs_up_to(root: &Path, start: &Path) {
+    let mut current = start.to_path_buf();
+    while current != root && current.starts_with(root) {
+        // start 常常是刚被删掉的目录（skills 目录自己已由调用方收走），
+        // 读不到就继续往上看它的父目录，而不是就此收手。
+        if current.exists() {
+            let is_empty = match fs::read_dir(&current) {
+                Ok(mut entries) => entries.next().is_none(),
+                Err(_) => return,
+            };
+            if !is_empty || fs::remove_dir(&current).is_err() {
+                return;
+            }
+        }
+        match current.parent() {
+            Some(parent) => current = parent.to_path_buf(),
+            None => return,
+        }
+    }
 }
 
 /// 文件空了就删掉，不在用户仓库里留空壳
@@ -1445,6 +1482,88 @@ mod tests {
         }
         assert!(!claude_skills_dir(&root).exists(), "空的 skills 目录要清掉");
         assert!(!codex_skills_dir(&root).exists(), "空的 skills 目录要清掉");
+    }
+
+    /// 真机联调发现的回归：解绑后 `.claude/`、`.agents/` 这两层空目录曾被留在
+    /// 用户仓库里。撤销必须让仓库回到绑定前的样子。
+    #[test]
+    #[serial_test::serial]
+    fn unbinding_leaves_the_repository_exactly_as_it_was() {
+        let fixture = setup();
+        seed_server(&fixture.db, "ctx7", McpApps::default());
+        seed_skill(&fixture.db, "local:helper", "helper", SkillApps::default());
+        let root = repo_root(&fixture);
+
+        // 绑定前的样子：只有一个无关文件
+        fs::write(
+            root.join("README.md"),
+            "hello
+",
+        )
+        .expect("seed readme");
+        let before = snapshot(&root);
+
+        for app in ProjectApp::all() {
+            ProjectScopeService::toggle_mcp(&fixture.db, &fixture.project_id, "ctx7", app, true)
+                .expect("bind mcp");
+            ProjectScopeService::toggle_skill(
+                &fixture.db,
+                &fixture.project_id,
+                "local:helper",
+                app,
+                true,
+            )
+            .expect("bind skill");
+        }
+        assert_ne!(snapshot(&root), before, "绑定应当确实写了东西");
+
+        for app in ProjectApp::all() {
+            ProjectScopeService::toggle_mcp(&fixture.db, &fixture.project_id, "ctx7", app, false)
+                .expect("unbind mcp");
+            ProjectScopeService::toggle_skill(
+                &fixture.db,
+                &fixture.project_id,
+                "local:helper",
+                app,
+                false,
+            )
+            .expect("unbind skill");
+        }
+
+        assert_eq!(
+            snapshot(&root),
+            before,
+            "解绑后仓库必须回到原样，连空目录都不留"
+        );
+    }
+
+    /// 仓库里所有路径（相对、排序），目录带尾斜杠
+    fn snapshot(root: &Path) -> Vec<String> {
+        fn walk(dir: &Path, root: &Path, out: &mut Vec<String>) {
+            let Ok(entries) = fs::read_dir(dir) else {
+                return;
+            };
+            for entry in entries.flatten() {
+                let path = entry.path();
+                let relative = path
+                    .strip_prefix(root)
+                    .map(|rest| {
+                        rest.to_string_lossy()
+                            .replace(std::path::MAIN_SEPARATOR, "/")
+                    })
+                    .unwrap_or_default();
+                if path.is_dir() {
+                    out.push(format!("{relative}/"));
+                    walk(&path, root, out);
+                } else {
+                    out.push(relative);
+                }
+            }
+        }
+        let mut out = Vec::new();
+        walk(root, root, &mut out);
+        out.sort();
+        out
     }
 
     #[test]
