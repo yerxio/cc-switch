@@ -519,6 +519,8 @@ export function useInstallSkillsFromZip() {
       currentApp?: AppId;
     }) => skillsApi.installFromZip(filePath, currentApp),
     onSuccess: (result) => {
+      // ZIP 里的层级 / 清单可能新建了文件夹、归了类
+      void queryClient.invalidateQueries({ queryKey: ["skills", "folders"] });
       queryClient.setQueryData<InstalledSkill[]>(
         ["skills", "installed"],
         (oldData) => mergeImportedSkills(oldData, result.installed),

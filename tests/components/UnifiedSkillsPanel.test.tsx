@@ -19,6 +19,13 @@ const m = vi.hoisted(() => ({
   bulkToggle: vi.fn(),
   uninstall: vi.fn(),
   uninstallMany: vi.fn(),
+  // 文件夹
+  folderState: { folders: [], assignments: {} } as {
+    folders: Array<{ id: string; name: string; sortOrder: number }>;
+    assignments: Record<string, string>;
+  },
+  moveToFolder: vi.fn(),
+  createFolder: vi.fn(),
   importSkills: vi.fn(),
   installFromZip: vi.fn(),
   deleteBackup: vi.fn(),
@@ -55,6 +62,7 @@ vi.mock("@tanstack/react-virtual", () => ({
         index,
         key: index,
         start: 44 + index * 56,
+        size: 56,
       })),
     measure: () => undefined,
     measureElement: () => undefined,
@@ -153,6 +161,29 @@ vi.mock("@/hooks/useSkills", () => ({
   useInstallSkill: () => ({ mutateAsync: vi.fn() }),
 }));
 
+vi.mock("@/hooks/useSkillFolders", async () => {
+  // 折叠状态是纯前端的 React 状态，用真的；其余都是打后端的，换成 mock
+  const actual = await vi.importActual<
+    typeof import("@/hooks/useSkillFolders")
+  >("@/hooks/useSkillFolders");
+  const idle = { mutateAsync: vi.fn(), isPending: false };
+  return {
+    ...actual,
+    useSkillFolders: () => ({ data: m.folderState }),
+    useCreateSkillFolder: () => ({
+      mutateAsync: m.createFolder,
+      isPending: false,
+    }),
+    useRenameSkillFolder: () => idle,
+    useDeleteSkillFolder: () => idle,
+    useMoveSkillsToFolder: () => ({
+      mutateAsync: m.moveToFolder,
+      isPending: false,
+    }),
+    useExportSkillsZip: () => idle,
+  };
+});
+
 vi.mock("@/hooks/useProjectScope", () => ({
   useScopedProjects: () => ({ data: m.scopedProjects }),
   useSelectedProjectScope: () => ({
@@ -243,7 +274,13 @@ describe("UnifiedSkillsPanel", () => {
       .mockReset()
       .mockImplementation(async ({ ids }) => ({ succeeded: ids, failed: [] }));
     m.uninstall.mockReset().mockResolvedValue({});
-    m.uninstallMany.mockReset().mockResolvedValue({ succeeded: [], failed: [] });
+    m.uninstallMany
+      .mockReset()
+      .mockResolvedValue({ succeeded: [], failed: [] });
+    m.folderState = { folders: [], assignments: {} };
+    m.moveToFolder.mockReset().mockResolvedValue(1);
+    m.createFolder.mockReset();
+    window.localStorage.clear();
     m.importSkills.mockReset().mockResolvedValue([]);
     m.deleteBackup.mockReset();
     m.restoreBackup.mockReset();
@@ -1006,7 +1043,9 @@ describe("UnifiedSkillsPanel", () => {
       ),
     );
     // 不带 currentApp：后端只落 SSOT + 入库，不写任何应用目录
-    expect(m.installFromZip).toHaveBeenCalledWith({ filePath: "/tmp/team.zip" });
+    expect(m.installFromZip).toHaveBeenCalledWith({
+      filePath: "/tmp/team.zip",
+    });
     // 也不得在前端补启用（原来 installTo 会逐个 toggle 其余目标应用）
     expect(m.toggle).not.toHaveBeenCalled();
     dialog.mockRestore();
@@ -1243,7 +1282,11 @@ describe("UnifiedSkillsPanel", () => {
       .mockImplementation(async ({ force }: { force?: boolean }) =>
         force
           ? { status: "applied" }
-          : { status: "conflict", key: "alpha-skill", path: ".claude/skills/alpha-skill" },
+          : {
+              status: "conflict",
+              key: "alpha-skill",
+              path: ".claude/skills/alpha-skill",
+            },
       );
     renderPanel();
 
@@ -1274,7 +1317,6 @@ describe("UnifiedSkillsPanel", () => {
       ),
     );
   });
-
 
   it("uninstalls a multi-selection with one bulk call instead of one call per Skill", async () => {
     m.installed = [
@@ -1321,5 +1363,108 @@ describe("UnifiedSkillsPanel", () => {
         description: expect.stringContaining("disk is read-only"),
       }),
     );
+  });
+
+  describe("folders", () => {
+    const withFolders = () => {
+      m.installed = [
+        makeSkill({ id: "local:a", name: "A", directory: "a" }),
+        makeSkill({
+          id: "local:b",
+          name: "B",
+          directory: "b",
+          apps: { claude: true },
+        }),
+        makeSkill({ id: "local:c", name: "C", directory: "c" }),
+      ];
+      m.folderState = {
+        folders: [{ id: "f-web", name: "Web", sortOrder: 0 }],
+        assignments: { "local:a": "f-web", "local:b": "f-web" },
+      };
+    };
+
+    it("groups Skills under their folder with the rest under Unfiled", () => {
+      withFolders();
+      renderPanel();
+
+      const rows = screen
+        .getByRole("list", { name: "skillsPage.listLabel" })
+        .querySelectorAll("li");
+      const labels = Array.from(rows).map(
+        (row) =>
+          row.getAttribute("data-folder-row") ?? row.id.replace("sk-row-", ""),
+      );
+      expect(labels).toEqual([
+        "Web",
+        "local:a",
+        "local:b",
+        "skillFolders.unfiled",
+        "local:c",
+      ]);
+    });
+
+    it("enables the rest of a folder for an app from the folder row", async () => {
+      withFolders();
+      renderPanel();
+
+      // B 已经给 Claude 开了，A 没开：文件夹是「部分启用」，点一下只补 A
+      await userEvent.click(
+        screen.getAllByRole("button", { name: /skillFolders.cell.some/ })[0],
+      );
+      await waitFor(() =>
+        expect(m.bulkToggle).toHaveBeenCalledWith({
+          ids: ["local:a"],
+          app: "claude",
+          enabled: true,
+        }),
+      );
+      // 不在这个文件夹里的 C 不该被带上
+      expect(m.bulkToggle.mock.calls[0][0].ids).not.toContain("local:c");
+    });
+
+    it("hides a folder's Skills when it is collapsed and keeps the header", async () => {
+      withFolders();
+      renderPanel();
+      expect(document.getElementById("sk-row-local:a")).not.toBeNull();
+
+      // Web 和「未分类」各有一个折叠按钮，第一个是 Web
+      await userEvent.click(
+        screen.getAllByRole("button", { name: "skillFolders.collapseAria" })[0],
+      );
+
+      expect(document.getElementById("sk-row-local:a")).toBeNull();
+      expect(document.getElementById("sk-row-local:c")).not.toBeNull();
+      expect(
+        screen.getByRole("button", { name: "skillFolders.expandAria" }),
+      ).toBeInTheDocument();
+    });
+
+    it("moves the selection into a folder from the bulk bar", async () => {
+      withFolders();
+      renderPanel();
+
+      await userEvent.click(
+        screen.getByRole("checkbox", { name: "skillsPage.selectAllAria" }),
+      );
+      await userEvent.click(
+        screen.getByRole("button", { name: "skillFolders.moveTo" }),
+      );
+      await userEvent.click(
+        await screen.findByRole("menuitem", { name: "Web" }),
+      );
+
+      await waitFor(() => expect(m.moveToFolder).toHaveBeenCalledTimes(1));
+      const call = m.moveToFolder.mock.calls[0][0];
+      expect(call.folderId).toBe("f-web");
+      expect(call.skillIds).toEqual(
+        expect.arrayContaining(["local:a", "local:b", "local:c"]),
+      );
+    });
+
+    it("renders no folder rows at all when no folder exists", () => {
+      m.installed = [makeSkill()];
+      renderPanel();
+      expect(document.querySelector("[data-folder-row]")).toBeNull();
+    });
   });
 });

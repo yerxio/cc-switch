@@ -5483,5 +5483,42 @@
     "scopeAriaLabel": "Scope: global or a single project",
     "searchPlaceholder": "Search name or ID",
     "toggleFailed": "Could not change the project setting for {{name}}"
+  },
+  "skillFolders": {
+    "unfiled": "Unfiled",
+    "newFolderEllipsis": "New folder…",
+    "newFolderTitle": "New folder",
+    "renameTitle": "Rename folder",
+    "nameLabel": "Folder name",
+    "namePlaceholder": "e.g. Reverse engineering",
+    "create": "Create",
+    "rename": "Rename",
+    "delete": "Delete folder",
+    "deleteTitle": "Delete the folder {{name}}?",
+    "deleteBody": "This only dissolves the group. The Skills in it stay installed and go back to Unfiled.",
+    "moveTo": "Move to",
+    "moveOut": "Remove from folder (Unfiled)",
+    "exportSelected": "Export ZIP",
+    "exportAll": "Export all as ZIP…",
+    "exportFolder": "Export this folder…",
+    "exportDefaultName": "skills",
+    "expandAria": "Expand folder {{name}}",
+    "collapseAria": "Collapse folder {{name}}",
+    "moreAria": "More actions for folder {{name}}",
+    "cell": {
+      "all": "{{name}} · {{app}}: all enabled — click to disable all",
+      "some": "{{name}} · {{app}}: some enabled — click to enable the rest",
+      "none": "{{name}} · {{app}}: none enabled — click to enable all"
+    },
+    "toast": {
+      "created": "Created folder {{name}}",
+      "deleted": "Deleted folder {{name}}",
+      "moved": "Moved {{count}} Skills to {{name}}",
+      "movedOut": "Removed {{count}} Skills from their folder",
+      "exported": "Exported {{count}} Skills",
+      "exportedPartial": "Exported {{count}}; {{missing}} more have no files and could not be exported",
+      "exportFailed": "Export failed",
+      "failed": "The folder action did not go through"
+    }
   }
 }

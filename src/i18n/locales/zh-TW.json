@@ -5483,5 +5483,42 @@
     "scopeAriaLabel": "作用域：全域或某個專案",
     "searchPlaceholder": "搜尋名稱或 ID",
     "toggleFailed": "{{name}} 的專案級開關沒改成功"
+  },
+  "skillFolders": {
+    "unfiled": "未分類",
+    "newFolderEllipsis": "新增資料夾…",
+    "newFolderTitle": "新增資料夾",
+    "renameTitle": "重新命名資料夾",
+    "nameLabel": "資料夾名稱",
+    "namePlaceholder": "例如：逆向分析",
+    "create": "建立",
+    "rename": "重新命名",
+    "delete": "刪除資料夾",
+    "deleteTitle": "刪除資料夾 {{name}}？",
+    "deleteBody": "只是解散這個分組，裡面的 Skill 不會被解除安裝，會回到「未分類」。",
+    "moveTo": "移動到",
+    "moveOut": "移出資料夾（未分類）",
+    "exportSelected": "匯出 ZIP",
+    "exportAll": "全部匯出為 ZIP…",
+    "exportFolder": "匯出這個資料夾…",
+    "exportDefaultName": "skills",
+    "expandAria": "展開資料夾 {{name}}",
+    "collapseAria": "摺疊資料夾 {{name}}",
+    "moreAria": "資料夾 {{name}} 的更多操作",
+    "cell": {
+      "all": "{{name}} · {{app}}：全部已啟用，點一下全部停用",
+      "some": "{{name}} · {{app}}：部分已啟用，點一下把剩下的都啟用",
+      "none": "{{name}} · {{app}}：都沒啟用，點一下全部啟用"
+    },
+    "toast": {
+      "created": "已建立資料夾 {{name}}",
+      "deleted": "已刪除資料夾 {{name}}",
+      "moved": "已把 {{count}} 個 Skill 移到 {{name}}",
+      "movedOut": "已把 {{count}} 個 Skill 移出資料夾",
+      "exported": "已匯出 {{count}} 個 Skill",
+      "exportedPartial": "匯出了 {{count}} 個，另有 {{missing}} 個沒有檔案、無法匯出",
+      "exportFailed": "匯出失敗",
+      "failed": "資料夾操作沒有成功"
+    }
   }
 }

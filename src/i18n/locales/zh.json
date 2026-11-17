@@ -5483,5 +5483,42 @@
     "scopeAriaLabel": "作用域：全局或某个项目",
     "searchPlaceholder": "搜索名称或 ID",
     "toggleFailed": "{{name}} 的项目级开关没改成功"
+  },
+  "skillFolders": {
+    "unfiled": "未分类",
+    "newFolderEllipsis": "新建文件夹…",
+    "newFolderTitle": "新建文件夹",
+    "renameTitle": "重命名文件夹",
+    "nameLabel": "文件夹名",
+    "namePlaceholder": "例如：逆向分析",
+    "create": "创建",
+    "rename": "重命名",
+    "delete": "删除文件夹",
+    "deleteTitle": "删除文件夹 {{name}}？",
+    "deleteBody": "只是解散这个分组，里面的 Skill 不会被卸载，会回到「未分类」。",
+    "moveTo": "移动到",
+    "moveOut": "移出文件夹（未分类）",
+    "exportSelected": "导出 ZIP",
+    "exportAll": "导出全部为 ZIP…",
+    "exportFolder": "导出这个文件夹…",
+    "exportDefaultName": "skills",
+    "expandAria": "展开文件夹 {{name}}",
+    "collapseAria": "折叠文件夹 {{name}}",
+    "moreAria": "文件夹 {{name}} 的更多操作",
+    "cell": {
+      "all": "{{name}} · {{app}}：全部已启用，点一下全部停用",
+      "some": "{{name}} · {{app}}：部分已启用，点一下把剩下的都启用",
+      "none": "{{name}} · {{app}}：都没启用，点一下全部启用"
+    },
+    "toast": {
+      "created": "已创建文件夹 {{name}}",
+      "deleted": "已删除文件夹 {{name}}",
+      "moved": "已把 {{count}} 个 Skill 移到 {{name}}",
+      "movedOut": "已把 {{count}} 个 Skill 移出文件夹",
+      "exported": "已导出 {{count}} 个 Skill",
+      "exportedPartial": "导出了 {{count}} 个，另有 {{missing}} 个没有文件、没法导出",
+      "exportFailed": "导出失败",
+      "failed": "文件夹操作没成功"
+    }
   }
 }

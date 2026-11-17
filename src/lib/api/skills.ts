@@ -159,6 +159,8 @@ export interface ZipSkippedSkill {
 export interface ZipInstallResult {
   installed: InstalledSkill[];
   skipped: ZipSkippedSkill[];
+  /** 这次导入用到的文件夹名（按 ZIP 里的层级或清单归的类） */
+  folders?: string[];
 }
 
 /** 「立即重新同步」里单个应用的结果 */

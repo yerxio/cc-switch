@@ -5483,5 +5483,42 @@
     "scopeAriaLabel": "범위: 전역 또는 특정 프로젝트",
     "searchPlaceholder": "이름 또는 ID 검색",
     "toggleFailed": "{{name}}의 프로젝트 설정을 변경하지 못했습니다"
+  },
+  "skillFolders": {
+    "unfiled": "미분류",
+    "newFolderEllipsis": "새 폴더…",
+    "newFolderTitle": "새 폴더",
+    "renameTitle": "폴더 이름 바꾸기",
+    "nameLabel": "폴더 이름",
+    "namePlaceholder": "예: 리버스 엔지니어링",
+    "create": "만들기",
+    "rename": "이름 바꾸기",
+    "delete": "폴더 삭제",
+    "deleteTitle": "폴더 {{name}}을(를) 삭제할까요?",
+    "deleteBody": "그룹만 해제합니다. 안에 있는 스킬은 제거되지 않고 '미분류'로 돌아갑니다.",
+    "moveTo": "이동",
+    "moveOut": "폴더에서 빼기(미분류)",
+    "exportSelected": "ZIP 내보내기",
+    "exportAll": "모두 ZIP으로 내보내기…",
+    "exportFolder": "이 폴더 내보내기…",
+    "exportDefaultName": "skills",
+    "expandAria": "폴더 {{name}} 펼치기",
+    "collapseAria": "폴더 {{name}} 접기",
+    "moreAria": "폴더 {{name}}의 추가 작업",
+    "cell": {
+      "all": "{{name}} · {{app}}: 모두 활성화됨. 클릭하면 모두 비활성화합니다",
+      "some": "{{name}} · {{app}}: 일부 활성화됨. 클릭하면 나머지도 활성화합니다",
+      "none": "{{name}} · {{app}}: 모두 비활성. 클릭하면 모두 활성화합니다"
+    },
+    "toast": {
+      "created": "폴더 {{name}}을(를) 만들었습니다",
+      "deleted": "폴더 {{name}}을(를) 삭제했습니다",
+      "moved": "스킬 {{count}}개를 {{name}}(으)로 옮겼습니다",
+      "movedOut": "스킬 {{count}}개를 폴더에서 뺐습니다",
+      "exported": "스킬 {{count}}개를 내보냈습니다",
+      "exportedPartial": "{{count}}개를 내보냈습니다. {{missing}}개는 파일이 없어 내보내지 못했습니다",
+      "exportFailed": "내보내기에 실패했습니다",
+      "failed": "폴더 작업을 완료하지 못했습니다"
+    }
   }
 }

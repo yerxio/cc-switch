@@ -5483,5 +5483,42 @@
     "scopeAriaLabel": "Kapsam: genel ya da tek bir proje",
     "searchPlaceholder": "Ad veya kimlik ara",
     "toggleFailed": "{{name}} için proje ayarı değiştirilemedi"
+  },
+  "skillFolders": {
+    "unfiled": "Sınıflandırılmamış",
+    "newFolderEllipsis": "Yeni klasör…",
+    "newFolderTitle": "Yeni klasör",
+    "renameTitle": "Klasörü yeniden adlandır",
+    "nameLabel": "Klasör adı",
+    "namePlaceholder": "örn. Tersine mühendislik",
+    "create": "Oluştur",
+    "rename": "Yeniden adlandır",
+    "delete": "Klasörü sil",
+    "deleteTitle": "{{name}} klasörü silinsin mi?",
+    "deleteBody": "Bu yalnızca grubu dağıtır. İçindeki Beceriler kaldırılmaz ve Sınıflandırılmamış'a döner.",
+    "moveTo": "Taşı",
+    "moveOut": "Klasörden çıkar (Sınıflandırılmamış)",
+    "exportSelected": "ZIP dışa aktar",
+    "exportAll": "Tümünü ZIP olarak dışa aktar…",
+    "exportFolder": "Bu klasörü dışa aktar…",
+    "exportDefaultName": "skills",
+    "expandAria": "{{name}} klasörünü genişlet",
+    "collapseAria": "{{name}} klasörünü daralt",
+    "moreAria": "{{name}} klasörü için diğer işlemler",
+    "cell": {
+      "all": "{{name}} · {{app}}: tümü etkin — tümünü devre dışı bırakmak için tıklayın",
+      "some": "{{name}} · {{app}}: bazıları etkin — kalanını etkinleştirmek için tıklayın",
+      "none": "{{name}} · {{app}}: hiçbiri etkin değil — tümünü etkinleştirmek için tıklayın"
+    },
+    "toast": {
+      "created": "{{name}} klasörü oluşturuldu",
+      "deleted": "{{name}} klasörü silindi",
+      "moved": "{{count}} Beceri {{name}} klasörüne taşındı",
+      "movedOut": "{{count}} Beceri klasöründen çıkarıldı",
+      "exported": "{{count}} Beceri dışa aktarıldı",
+      "exportedPartial": "{{count}} dışa aktarıldı; {{missing}} tanesinin dosyası yok ve dışa aktarılamadı",
+      "exportFailed": "Dışa aktarma başarısız",
+      "failed": "Klasör işlemi tamamlanamadı"
+    }
   }
 }

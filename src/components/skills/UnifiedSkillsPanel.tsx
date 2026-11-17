@@ -55,6 +55,24 @@ import {
 import type { AppId } from "@/lib/api/types";
 import { settingsApi, skillsApi } from "@/lib/api";
 import type { SkillUninstallResult } from "@/lib/api/skills";
+import { skillFoldersApi, type SkillFolder } from "@/lib/api/skillFolders";
+import {
+  useCollapsedFolders,
+  useCreateSkillFolder,
+  useDeleteSkillFolder,
+  useExportSkillsZip,
+  useMoveSkillsToFolder,
+  useRenameSkillFolder,
+  useSkillFolders,
+} from "@/hooks/useSkillFolders";
+import {
+  buildSkillDisplayRows,
+  FOLDER_ROW_HEIGHT,
+  FolderHeaderRow,
+  FolderNameDialog,
+  MoveToFolderMenu,
+  UNFILED_KEY,
+} from "./skillFolders";
 import { copyText } from "@/lib/clipboard";
 import { extractErrorMessage } from "@/utils/errorUtils";
 import { cn } from "@/lib/utils";
@@ -87,6 +105,8 @@ import {
 } from "@/hooks/useProjectScope";
 
 const BACKUP_DIR = "~/.cc-switch/skill-backups";
+const EMPTY_FOLDERS: SkillFolder[] = [];
+const EMPTY_ASSIGNMENTS: Record<string, string> = {};
 /** 已安装列表的行高（InstalledRow 的 h-14）与表头高（h-11），虚拟化按这两个数算 */
 const INSTALLED_ROW_HEIGHT = 56;
 const MATRIX_HEADER_HEIGHT = 44;
@@ -203,6 +223,30 @@ const UnifiedSkillsPanel: React.FC<UnifiedSkillsPanelProps> = ({
   const bulkToggleAppMutation = useBulkToggleSkillApp();
   const uninstallMutation = useUninstallSkill();
   const uninstallManyMutation = useUninstallSkills();
+
+  // 文件夹：纯收纳视图，不改变任何文件的落点
+  const { data: folderState } = useSkillFolders();
+  const folders = folderState?.folders ?? EMPTY_FOLDERS;
+  const folderAssignments = folderState?.assignments ?? EMPTY_ASSIGNMENTS;
+  const {
+    collapsed: collapsedFolders,
+    toggle: toggleFolder,
+    expand: expandFolder,
+  } = useCollapsedFolders();
+  const createFolderMutation = useCreateSkillFolder();
+  const renameFolderMutation = useRenameSkillFolder();
+  const deleteFolderMutation = useDeleteSkillFolder();
+  const moveToFolderMutation = useMoveSkillsToFolder();
+  const exportZipMutation = useExportSkillsZip();
+  /** 取名框：新建（可带上要一并移进去的 Skill）或重命名 */
+  const [folderDialog, setFolderDialog] = useState<
+    | { mode: "create"; moveIds: string[] }
+    | { mode: "rename"; folder: SkillFolder }
+    | null
+  >(null);
+  const [folderToDelete, setFolderToDelete] = useState<SkillFolder | null>(
+    null,
+  );
   const restoreBackupMutation = useRestoreSkillBackup();
   // 进入页面时静默扫描一次「本机已有但未管理」的 Skill
   const { data: unmanagedSkills, refetch: scanUnmanaged } =
@@ -406,11 +450,35 @@ const UnifiedSkillsPanel: React.FC<UnifiedSkillsPanelProps> = ({
   // 已安装列表虚拟化：上千行时只画可视区域和前后各几行（每行固定 56）。
   // 不虚拟化的话每次勾选、每次卸载都要重画全部行 × 全部应用列。
   const matrixScrollRef = useRef<HTMLDivElement>(null);
+  // 文件夹行和条目行混排；一个文件夹都没有时就是原来的扁平列表
+  const displayRows = useMemo(
+    () =>
+      buildSkillDisplayRows(
+        filteredSkills,
+        folders,
+        folderAssignments,
+        collapsedFolders,
+        filteredSkills.length !== installedSkills.length,
+      ),
+    [
+      filteredSkills,
+      folders,
+      folderAssignments,
+      collapsedFolders,
+      installedSkills.length,
+    ],
+  );
   const rowVirtualizer = useVirtualizer({
-    count: filteredSkills.length,
+    count: displayRows.length,
     getScrollElement: () => matrixScrollRef.current,
-    estimateSize: () => INSTALLED_ROW_HEIGHT,
-    getItemKey: (index) => filteredSkills[index]?.id ?? index,
+    estimateSize: (index) =>
+      displayRows[index]?.kind === "folder"
+        ? FOLDER_ROW_HEIGHT
+        : INSTALLED_ROW_HEIGHT,
+    getItemKey: (index) => {
+      const row = displayRows[index];
+      return row ? `${row.kind}:${row.key}` : index;
+    },
     // 表头钉在同一个滚动容器里，行从它下面开始
     scrollMargin: MATRIX_HEADER_HEIGHT,
     overscan: 8,
@@ -420,8 +488,16 @@ const UnifiedSkillsPanel: React.FC<UnifiedSkillsPanelProps> = ({
   // 所以先让虚拟列表滚过去，下一帧再聚焦。
   useEffect(() => {
     if (!highlightId || view !== "installed") return;
-    const index = filteredSkills.findIndex((skill) => skill.id === highlightId);
-    if (index < 0) return;
+    const index = displayRows.findIndex(
+      (row) => row.kind === "skill" && row.key === highlightId,
+    );
+    if (index < 0) {
+      // 那一行可能收在折叠的文件夹里：展开它，displayRows 变了这个 effect 会再跑
+      if (filteredSkills.some((skill) => skill.id === highlightId)) {
+        expandFolder(folderAssignments[highlightId] ?? UNFILED_KEY);
+      }
+      return;
+    }
     rowVirtualizer.scrollToIndex(index, { align: "center" });
     const frame = requestAnimationFrame(() => {
       document
@@ -430,7 +506,7 @@ const UnifiedSkillsPanel: React.FC<UnifiedSkillsPanelProps> = ({
     });
     return () => cancelAnimationFrame(frame);
     // rowVirtualizer 每次渲染都是新对象，放进依赖会让这个 effect 每帧重跑
-  }, [highlightId, view, filteredSkills]);
+  }, [highlightId, view, displayRows]);
 
   // 在「发现」段按 Escape 回到「已安装」
   useEffect(() => {
@@ -556,6 +632,138 @@ const UnifiedSkillsPanel: React.FC<UnifiedSkillsPanelProps> = ({
       on: "appMatrix.toast.enabled",
       off: "appMatrix.toast.disabled",
     });
+  };
+
+  // ─── 文件夹 ─────────────────────────────────────────────────────────
+  /** 文件夹行上的格子：对整个文件夹批量开关 */
+  const handleFolderToggle = (
+    members: InstalledSkill[],
+    app: AppId,
+    enabled: boolean,
+  ) => {
+    const ids = members
+      .filter((skill) => Boolean(skill.apps[app]) !== enabled)
+      .map((skill) => skill.id);
+    if (ids.length === 0) return;
+    void bulkToggle(ids, app, enabled, {
+      on: "appMatrix.toast.enabled",
+      off: "appMatrix.toast.disabled",
+    });
+  };
+
+  const handleMoveToFolder = async (ids: string[], folderId: string | null) => {
+    if (ids.length === 0) return;
+    try {
+      await moveToFolderMutation.mutateAsync({ skillIds: ids, folderId });
+      const folder = folders.find((item) => item.id === folderId);
+      toast.success(
+        folder
+          ? t("skillFolders.toast.moved", {
+              count: ids.length,
+              name: folder.name,
+            })
+          : t("skillFolders.toast.movedOut", { count: ids.length }),
+        { closeButton: true },
+      );
+      setSelected(new Set());
+    } catch (error) {
+      toast.error(t("skillFolders.toast.failed"), {
+        description: String(error),
+      });
+    }
+  };
+
+  const handleFolderNameSubmit = async (name: string) => {
+    if (!folderDialog) return;
+    try {
+      if (folderDialog.mode === "create") {
+        const created = await createFolderMutation.mutateAsync(name);
+        // 从「移动到… → 新建文件夹」进来的，建完直接把选中的移进去
+        if (folderDialog.moveIds.length > 0) {
+          await moveToFolderMutation.mutateAsync({
+            skillIds: folderDialog.moveIds,
+            folderId: created.id,
+          });
+          setSelected(new Set());
+          toast.success(
+            t("skillFolders.toast.moved", {
+              count: folderDialog.moveIds.length,
+              name: created.name,
+            }),
+            { closeButton: true },
+          );
+        } else {
+          toast.success(
+            t("skillFolders.toast.created", { name: created.name }),
+            {
+              closeButton: true,
+            },
+          );
+        }
+      } else {
+        await renameFolderMutation.mutateAsync({
+          id: folderDialog.folder.id,
+          name,
+        });
+      }
+      setFolderDialog(null);
+    } catch (error) {
+      // 重名之类的校验错误：留着取名框让用户改
+      toast.error(t("skillFolders.toast.failed"), {
+        description: String(error),
+      });
+    }
+  };
+
+  const handleDeleteFolder = async () => {
+    if (!folderToDelete) return;
+    const target = folderToDelete;
+    setFolderToDelete(null);
+    try {
+      await deleteFolderMutation.mutateAsync(target.id);
+      toast.success(t("skillFolders.toast.deleted", { name: target.name }), {
+        closeButton: true,
+      });
+    } catch (error) {
+      toast.error(t("skillFolders.toast.failed"), {
+        description: String(error),
+      });
+    }
+  };
+
+  /** 导出成 ZIP，保留文件夹层级。`baseName` 只用来起默认文件名。 */
+  const handleExport = async (ids: string[], baseName: string) => {
+    if (ids.length === 0) return;
+    try {
+      const filePath = await skillFoldersApi.pickExportPath(`${baseName}.zip`);
+      if (!filePath) return;
+      const report = await exportZipMutation.mutateAsync({
+        skillIds: ids,
+        filePath,
+      });
+      if (report.missing.length > 0) {
+        // 库里有记录但文件没了的导不出来，得说清楚少了哪些
+        toast.warning(
+          t("skillFolders.toast.exportedPartial", {
+            count: report.exported,
+            missing: report.missing.length,
+          }),
+          {
+            description: report.missing.slice(0, 5).join(listSeparator),
+            closeButton: true,
+          },
+        );
+      } else {
+        toast.success(
+          t("skillFolders.toast.exported", { count: report.exported }),
+          { description: report.path, closeButton: true },
+        );
+      }
+    } catch (error) {
+      toast.error(t("skillFolders.toast.exportFailed"), {
+        description: String(error),
+      });
+    }
   };
 
   const handleSelectionToggle = (app: AppId, enabled: boolean) => {
@@ -1075,6 +1283,26 @@ const UnifiedSkillsPanel: React.FC<UnifiedSkillsPanelProps> = ({
               <DropdownMenuItem onSelect={() => setStorageOpen(true)}>
                 {t("skills.storageSheet.open")}
               </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                disabled={controlsDisabled}
+                onSelect={() =>
+                  setFolderDialog({ mode: "create", moveIds: [] })
+                }
+              >
+                {t("skillFolders.newFolderEllipsis")}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={controlsDisabled || nInstalled === 0}
+                onSelect={() =>
+                  void handleExport(
+                    installedSkills.map((skill) => skill.id),
+                    t("skillFolders.exportDefaultName"),
+                  )
+                }
+              >
+                {t("skillFolders.exportAll")}
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </>
@@ -1203,7 +1431,7 @@ const UnifiedSkillsPanel: React.FC<UnifiedSkillsPanelProps> = ({
           0,
           rowVirtualizer.getTotalSize() -
             (lastRow.start - MATRIX_HEADER_HEIGHT) -
-            INSTALLED_ROW_HEIGHT,
+            lastRow.size,
         )
       : 0;
     return (
@@ -1362,8 +1590,42 @@ const UnifiedSkillsPanel: React.FC<UnifiedSkillsPanelProps> = ({
                 }}
               >
                 {virtualRows.map(({ index }) => {
-                  const skill = filteredSkills[index];
-                  if (!skill) return null;
+                  const row = displayRows[index];
+                  if (!row) return null;
+                  if (row.kind === "folder") {
+                    const { folder } = row;
+                    const name = folder?.name ?? t("skillFolders.unfiled");
+                    return (
+                      <FolderHeaderRow
+                        key={`folder:${row.key}`}
+                        name={name}
+                        skills={row.skills}
+                        collapsed={row.collapsed}
+                        first={index === 0}
+                        appIds={appIds}
+                        disabled={controlsDisabled}
+                        onToggleCollapsed={() => toggleFolder(row.key)}
+                        onCell={(app, enable) =>
+                          handleFolderToggle(row.skills, app, enable)
+                        }
+                        onExport={() =>
+                          void handleExport(
+                            row.skills.map((skill) => skill.id),
+                            name,
+                          )
+                        }
+                        onRename={
+                          folder
+                            ? () => setFolderDialog({ mode: "rename", folder })
+                            : undefined
+                        }
+                        onDelete={
+                          folder ? () => setFolderToDelete(folder) : undefined
+                        }
+                      />
+                    );
+                  }
+                  const { skill } = row;
                   return (
                     <InstalledRow
                       key={skill.id}
@@ -1618,6 +1880,34 @@ const UnifiedSkillsPanel: React.FC<UnifiedSkillsPanelProps> = ({
                       >
                         {t("skills.update")}
                       </Button>
+                      <MoveToFolderMenu
+                        folders={folders}
+                        disabled={controlsDisabled}
+                        onPick={(folderId) =>
+                          void handleMoveToFolder([...selected], folderId)
+                        }
+                        onCreate={() =>
+                          setFolderDialog({
+                            mode: "create",
+                            moveIds: [...selected],
+                          })
+                        }
+                      />
+                      <Button
+                        type="button"
+                        variant="quiet"
+                        size="compact"
+                        className="px-2"
+                        disabled={controlsDisabled}
+                        onClick={() =>
+                          void handleExport(
+                            [...selected],
+                            t("skillFolders.exportDefaultName"),
+                          )
+                        }
+                      >
+                        {t("skillFolders.exportSelected")}
+                      </Button>
                       <Button
                         type="button"
                         variant="quiet"
@@ -1761,6 +2051,42 @@ const UnifiedSkillsPanel: React.FC<UnifiedSkillsPanelProps> = ({
         )}
       </div>
 
+      <FolderNameDialog
+        open={folderDialog !== null}
+        title={t(
+          folderDialog?.mode === "rename"
+            ? "skillFolders.renameTitle"
+            : "skillFolders.newFolderTitle",
+        )}
+        confirmLabel={t(
+          folderDialog?.mode === "rename"
+            ? "skillFolders.rename"
+            : "skillFolders.create",
+        )}
+        initialName={
+          folderDialog?.mode === "rename" ? folderDialog.folder.name : ""
+        }
+        pending={
+          createFolderMutation.isPending ||
+          renameFolderMutation.isPending ||
+          moveToFolderMutation.isPending
+        }
+        onSubmit={(name) => void handleFolderNameSubmit(name)}
+        onCancel={() => setFolderDialog(null)}
+      />
+      <V7ConfirmDialog
+        open={folderToDelete !== null}
+        // 只是解散分组，里面的 Skill 一个都不卸载：不用红色确认键
+        danger={false}
+        title={t("skillFolders.deleteTitle", {
+          name: folderToDelete?.name ?? "",
+        })}
+        body={t("skillFolders.deleteBody")}
+        confirmLabel={t("skillFolders.delete")}
+        pending={deleteFolderMutation.isPending}
+        onConfirm={() => void handleDeleteFolder()}
+        onCancel={() => setFolderToDelete(null)}
+      />
       <V7ConfirmDialog
         open={confirm?.kind === "uninstall"}
         // 卸载前会备份、能从备份恢复：可恢复操作，不用红色确认键

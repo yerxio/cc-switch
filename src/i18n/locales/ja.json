@@ -5483,5 +5483,42 @@
     "scopeAriaLabel": "適用範囲：グローバルか特定のプロジェクト",
     "searchPlaceholder": "名前または ID で検索",
     "toggleFailed": "{{name}} のプロジェクト設定を変更できませんでした"
+  },
+  "skillFolders": {
+    "unfiled": "未分類",
+    "newFolderEllipsis": "新しいフォルダ…",
+    "newFolderTitle": "新しいフォルダ",
+    "renameTitle": "フォルダ名を変更",
+    "nameLabel": "フォルダ名",
+    "namePlaceholder": "例：リバースエンジニアリング",
+    "create": "作成",
+    "rename": "名前を変更",
+    "delete": "フォルダを削除",
+    "deleteTitle": "フォルダ {{name}} を削除しますか？",
+    "deleteBody": "グループを解除するだけです。中の Skill はアンインストールされず、「未分類」に戻ります。",
+    "moveTo": "移動先",
+    "moveOut": "フォルダから出す（未分類）",
+    "exportSelected": "ZIP に書き出す",
+    "exportAll": "すべてを ZIP に書き出す…",
+    "exportFolder": "このフォルダを書き出す…",
+    "exportDefaultName": "skills",
+    "expandAria": "フォルダ {{name}} を展開",
+    "collapseAria": "フォルダ {{name}} を折りたたむ",
+    "moreAria": "フォルダ {{name}} のその他の操作",
+    "cell": {
+      "all": "{{name}} · {{app}}：すべて有効。クリックですべて無効にします",
+      "some": "{{name}} · {{app}}：一部が有効。クリックで残りも有効にします",
+      "none": "{{name}} · {{app}}：すべて無効。クリックですべて有効にします"
+    },
+    "toast": {
+      "created": "フォルダ {{name}} を作成しました",
+      "deleted": "フォルダ {{name}} を削除しました",
+      "moved": "{{count}} 個の Skill を {{name}} に移動しました",
+      "movedOut": "{{count}} 個の Skill をフォルダから出しました",
+      "exported": "{{count}} 個の Skill を書き出しました",
+      "exportedPartial": "{{count}} 個を書き出しました。ほかに {{missing}} 個はファイルがなく書き出せませんでした",
+      "exportFailed": "書き出しに失敗しました",
+      "failed": "フォルダの操作を完了できませんでした"
+    }
   }
 }
