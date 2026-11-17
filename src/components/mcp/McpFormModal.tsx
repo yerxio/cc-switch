@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/sheet";
 import { HoverTip } from "@/components/ui/hover-tip";
 import { Notice } from "@/components/ui/notice";
-import { AppGlyph, APP_DISPLAY_NAME } from "@/components/shell/AppGlyph";
+import { APP_DISPLAY_NAME } from "@/components/shell/AppGlyph";
 import type { McpServer, McpServerSpec } from "@/types";
 import { mcpPresets, getMcpPresetWithDescription } from "@/config/mcpPresets";
 import {
@@ -53,8 +53,6 @@ import {
 } from "./mcpDraft";
 import { APP_IDS_WITH, type AppIdWith } from "@/config/appSpecs";
 
-type AppsState = Record<AppIdWith<"mcp">, boolean>;
-
 /**
  * 不支持 SSE 的应用。Codex 的 `[mcp_servers.*]` 只有 stdio / Streamable HTTP，
  * 写进去的 SSE 地址会被当成 Streamable HTTP 连接（#8882）；Pi、Antigravity 的
@@ -82,8 +80,6 @@ interface McpFormModalProps {
   initialData?: McpServer;
   /** 现有全部服务器（查重、批量覆盖用） */
   existingServers?: Record<string, McpServer>;
-  /** 「写入到」里列出的应用（应用页里设为显示的） */
-  visibleAppIds?: AppIdWith<"mcp">[];
   onSave: () => void | Promise<void>;
   onClose: () => void;
 }
@@ -108,26 +104,20 @@ function metaOf(server?: McpServer): MetaDraft {
   };
 }
 
-function appsOf(
-  server: McpServer | undefined,
-  defaults: readonly AppIdWith<"mcp">[],
-): AppsState {
-  const out = {} as AppsState;
-  for (const app of APP_IDS_WITH.mcp) {
-    out[app] = server ? Boolean(server.apps?.[app]) : defaults.includes(app);
-  }
-  return out;
-}
+/** 新建的服务器一个应用都不启用 */
+const NO_APPS = Object.fromEntries(
+  APP_IDS_WITH.mcp.map((app) => [app, false]),
+) as Record<AppIdWith<"mcp">, boolean>;
 
 /**
- * MCP 添加 / 编辑抽屉（宽 560）：模板、粘贴识别、表单 ⇄ JSON、写入到、说明与链接。
+ * MCP 添加 / 编辑抽屉（宽 560）：模板、粘贴识别、表单 ⇄ JSON、说明与链接。
+ * 写进哪些应用不在这里选：添加只入库，启用在列表的矩阵里勾。
  * 旧版的「配置向导」并进了表单。
  */
 const McpFormModal: React.FC<McpFormModalProps> = ({
   editingId,
   initialData,
   existingServers = {},
-  visibleAppIds = APP_IDS_WITH.mcp,
   onSave,
   onClose,
 }) => {
@@ -143,9 +133,6 @@ const McpFormModal: React.FC<McpFormModalProps> = ({
   const [conn, setConn] = useState<McpDraftConnection>(() =>
     connectionOf(initialData?.server ?? { type: "stdio" }),
   );
-  // 新建时一个应用都不勾：添加只是把服务器收进 CC Switch，写进哪些应用回到列表的
-  // 矩阵里逐个决定（和「从 ZIP 安装 Skill」一致）。编辑时照旧带出现有的勾选。
-  const [apps, setApps] = useState<AppsState>(() => appsOf(initialData, []));
   const [meta, setMeta] = useState<MetaDraft>(() => metaOf(initialData));
   const [metaOpen, setMetaOpen] = useState(false);
   const [tab, setTab] = useState<"form" | "json">("form");
@@ -192,9 +179,12 @@ const McpFormModal: React.FC<McpFormModalProps> = ({
     }
     return conn.transport === "sse";
   }, [conn, jsonText, tab]);
-  // 隐藏的应用编辑时原样保留、照样写入，所以按全部启用状态判断
+  // 表单不管「写进哪些应用」，那是列表矩阵的事。但把一个已经在某些应用里启用的
+  // 服务器改成 SSE 会影响那些应用，所以按它现有的启用状态提醒。
   const sseAppsIn = (list: readonly AppIdWith<"mcp">[]) =>
-    isSse && !batch ? list.filter((app) => apps[app]) : [];
+    isSse && !batch
+      ? list.filter((app) => Boolean(initialData?.apps?.[app]))
+      : [];
   const sseAsHttpApps = sseAppsIn(SSE_AS_HTTP_APPS);
   const sseRejectedApps = sseAppsIn(SSE_REJECTED_APPS);
   const appNames = (list: AppIdWith<"mcp">[]) =>
@@ -342,24 +332,16 @@ const McpFormModal: React.FC<McpFormModalProps> = ({
     base?: McpServer,
     metaDraft?: MetaDraft,
   ): McpServer => {
-    // 只用「写入到」里能看到的勾选覆盖原值：隐藏只影响界面，覆盖已有服务器时隐藏
-    // 应用的开关原样带回，否则会被当成关掉、从那些应用的配置里删掉；不支持 MCP 的
-    // 应用（OpenClaw 等）沿用原值，新建时为 false
-    // 添加模式下没有「写入到」，表单里的勾选全是没人碰过的 false——拿它去覆盖，
-    // 批量粘贴覆盖已有服务器时会把它在各应用里全部关掉。所以添加时不覆盖：
-    // 新条目全关，被覆盖的已有条目保持原来的启用状态。
-    const visibleApps = isEdit
-      ? Object.fromEntries(visibleAppIds.map((app) => [app, apps[app]]))
-      : {};
     const entry: McpServer = {
       ...(base ? { ...base } : {}),
       id,
       name: id,
       server: spec,
+      // 启用状态不归表单管：已有的原样带回，新建的全关。写进哪些应用只在列表的
+      // 矩阵里勾——那里每勾一下都立刻生效，表单里再放一份只会两边对不上。
       apps: {
         openclaw: false,
-        ...(base?.apps ?? appsOf(undefined, [])),
-        ...visibleApps,
+        ...(base?.apps ?? NO_APPS),
       } as McpServer["apps"],
     };
     if (!metaDraft) {
@@ -1214,68 +1196,27 @@ const McpFormModal: React.FC<McpFormModalProps> = ({
             </>
           )}
 
-          {/* 「写入到」只在编辑时出现：添加只入库，启用哪些应用在列表的矩阵里勾 */}
-          {isEdit && (
-            <div
-              role="group"
-              aria-labelledby="mcp-apps-label"
-              className="flex min-w-0 flex-col gap-2"
+          {sseAsHttpApps.length > 0 && (
+            <Notice
+              tone="warning"
+              title={t("mcpPage.drawer.sseAsHttpTitle", {
+                apps: appNames(sseAsHttpApps),
+              })}
             >
-              <div className="flex items-center gap-0.5">
-                <span id="mcp-apps-label" className={LABEL_CLASS}>
-                  {t("mcpPage.drawer.writeTo")}
-                </span>
-                <HelpTip title={t("mcpPage.drawer.writeToHelpTitle")}>
-                  {t("mcpPage.drawer.writeToHelp")}
-                </HelpTip>
-              </div>
-              <div className="grid grid-cols-2 gap-x-4 gap-y-2">
-                {visibleAppIds.map((app) => (
-                  <label
-                    key={app}
-                    className="flex h-6 cursor-pointer items-center gap-2 text-body"
-                  >
-                    <input
-                      type="checkbox"
-                      className={CHECKBOX_CLASS}
-                      checked={apps[app]}
-                      onChange={(event) =>
-                        setApps((prev) => ({
-                          ...prev,
-                          [app]: event.target.checked,
-                        }))
-                      }
-                    />
-                    <AppGlyph app={app} size={16} badgeClassName="bg-surface" />
-                    <span className="whitespace-nowrap">
-                      {APP_DISPLAY_NAME[app]}
-                    </span>
-                  </label>
-                ))}
-              </div>
-              {sseAsHttpApps.length > 0 && (
-                <Notice
-                  tone="warning"
-                  title={t("mcpPage.drawer.sseAsHttpTitle", {
-                    apps: appNames(sseAsHttpApps),
-                  })}
-                >
-                  {t("mcpPage.drawer.sseAsHttpBody", {
-                    apps: appNames(sseAsHttpApps),
-                  })}
-                </Notice>
-              )}
-              {sseRejectedApps.length > 0 && (
-                <Notice
-                  tone="warning"
-                  title={t("mcpPage.drawer.sseRejectedTitle", {
-                    apps: appNames(sseRejectedApps),
-                  })}
-                >
-                  {t("mcpPage.drawer.sseRejectedBody")}
-                </Notice>
-              )}
-            </div>
+              {t("mcpPage.drawer.sseAsHttpBody", {
+                apps: appNames(sseAsHttpApps),
+              })}
+            </Notice>
+          )}
+          {sseRejectedApps.length > 0 && (
+            <Notice
+              tone="warning"
+              title={t("mcpPage.drawer.sseRejectedTitle", {
+                apps: appNames(sseRejectedApps),
+              })}
+            >
+              {t("mcpPage.drawer.sseRejectedBody")}
+            </Notice>
           )}
 
           {!batch && (

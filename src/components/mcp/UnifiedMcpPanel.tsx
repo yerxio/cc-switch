@@ -1170,7 +1170,6 @@ const UnifiedMcpPanel: React.FC<UnifiedMcpPanelProps> = ({
             drawer.mode === "edit" ? serversMap?.[drawer.id] : undefined
           }
           existingServers={serversMap ?? {}}
-          visibleAppIds={appIds}
           onSave={() => setDrawer(null)}
           onClose={() => setDrawer(null)}
         />

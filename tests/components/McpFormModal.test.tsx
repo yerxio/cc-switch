@@ -73,7 +73,7 @@ describe("McpFormModal (drawer)", () => {
 
   it("adds a stdio server without writing it to any app", async () => {
     const { onSave } = renderForm();
-    // 添加界面里没有「写入到」：写进哪些应用回到列表的矩阵里勾
+    // 表单里没有「写入到」：写进哪些应用回到列表的矩阵里勾
     expect(screen.queryByText("mcpPage.drawer.writeTo")).toBeNull();
     fireEvent.change(el("mcp-name"), {
       target: { value: "my-server" },
@@ -104,19 +104,6 @@ describe("McpFormModal (drawer)", () => {
       expect.objectContaining({ description: "mcpPage.toast.addedHint" }),
     );
     expect(onSave).toHaveBeenCalled();
-  });
-
-  it("still offers the write-to choice when editing an existing server", () => {
-    renderForm({
-      editingId: "fetch",
-      initialData: {
-        id: "fetch",
-        name: "fetch",
-        server: { type: "stdio", command: "uvx" },
-        apps: { claude: true } as McpServer["apps"],
-      },
-    });
-    expect(screen.getByText("mcpPage.drawer.writeTo")).toBeInTheDocument();
   });
 
   it("shows field errors instead of saving when required fields are empty", async () => {
@@ -211,7 +198,6 @@ describe("McpFormModal (drawer)", () => {
     // 时不能拿它去盖原值，否则 figma 会在它原本启用的应用里被关掉、从配置里删掉。
     // 这里 figma 原本只在 Hermes 启用（Hermes 还从侧栏隐藏了），都要原样带回。
     renderForm({
-      visibleAppIds: ["claude", "codex"],
       existingServers: {
         figma: {
           id: "figma",
@@ -311,33 +297,36 @@ describe("McpFormModal (drawer)", () => {
     ).toBeDisabled();
   });
 
-  it("only lists visible apps but preserves hidden ones when editing", async () => {
+  it("has no write-to choice when editing and saves the server's app flags untouched", async () => {
+    // 启用哪些应用只在列表的矩阵里勾：表单里不出现，保存时也不能改动
     renderForm({
       editingId: "x",
-      visibleAppIds: ["claude", "codex"],
       initialData: {
         id: "x",
         name: "x",
         server: { type: "stdio", command: "uvx" },
-        apps: { claude: false, hermes: true } as McpServer["apps"],
+        apps: { claude: false, codex: true, hermes: true } as McpServer["apps"],
       },
     });
-    expect(screen.queryByText("Hermes")).not.toBeInTheDocument();
-    await userEvent.click(
-      screen.getByRole("checkbox", { name: /Claude Code/ }),
-    );
+    expect(screen.queryByText("mcpPage.drawer.writeTo")).toBeNull();
+    expect(screen.queryByRole("checkbox", { name: /Claude Code/ })).toBeNull();
+
+    fireEvent.change(el("mcp-cmd"), { target: { value: "npx" } });
     await userEvent.click(screen.getByRole("button", { name: "common.save" }));
     await waitFor(() => expect(mocks.upsert).toHaveBeenCalled());
-    expect(mocks.upsert.mock.calls[0][0].apps).toMatchObject({
-      claude: true,
+
+    const saved = mocks.upsert.mock.calls[0][0] as McpServer;
+    expect(saved.server).toMatchObject({ command: "npx" });
+    expect(saved.apps).toMatchObject({
+      claude: false,
+      codex: true,
       hermes: true,
     });
   });
 
-  it("warns when an SSE server is written to apps without SSE support", async () => {
+  it("warns when an SSE server is enabled in apps without SSE support", async () => {
     renderForm({
       editingId: "remote",
-      visibleAppIds: ["claude", "codex", "pi"],
       initialData: {
         id: "remote",
         name: "remote",
@@ -352,21 +341,38 @@ describe("McpFormModal (drawer)", () => {
       screen.getByText("mcpPage.drawer.sseRejectedTitle"),
     ).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("checkbox", { name: /Codex/ }));
+    // 改成 HTTP 两条提醒都该消失
+    await userEvent.click(screen.getByRole("button", { name: "HTTP" }));
     expect(
       screen.queryByText("mcpPage.drawer.sseAsHttpTitle"),
     ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("mcpPage.drawer.sseRejectedTitle"),
+    ).not.toBeInTheDocument();
+  });
 
-    await userEvent.click(screen.getByRole("button", { name: "HTTP" }));
+  it("does not warn about SSE for apps the server is not enabled in", () => {
+    renderForm({
+      editingId: "remote",
+      initialData: {
+        id: "remote",
+        name: "remote",
+        server: { type: "sse", url: "http://127.0.0.1:60002/sse" },
+        // 只在 Claude 启用：Codex / Pi 的 SSE 限制与它无关
+        apps: { claude: true } as McpServer["apps"],
+      },
+    });
+    expect(
+      screen.queryByText("mcpPage.drawer.sseAsHttpTitle"),
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByText("mcpPage.drawer.sseRejectedTitle"),
     ).not.toBeInTheDocument();
   });
 
   it("follows the JSON tab when checking for SSE", async () => {
-    // SSE 的提示是针对「勾了哪些应用」的，跟着「写入到」只在编辑时出现
+    // SSE 的提醒看的是这个服务器已经在哪些应用里启用
     renderForm({
-      visibleAppIds: ["claude", "codex"],
       editingId: "remote",
       initialData: {
         id: "remote",
