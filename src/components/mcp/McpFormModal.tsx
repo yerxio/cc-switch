@@ -1,7 +1,7 @@
 import React, { useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "@/lib/toast";
-import { Check, Eye, EyeOff, Plus, X } from "lucide-react";
+import { Check, Eye, EyeOff, FileUp, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { HelpTip } from "@/components/ui/help-tip";
 import { SegmentedControl } from "@/components/ui/segmented-control";
@@ -104,6 +104,19 @@ function metaOf(server?: McpServer): MetaDraft {
   };
 }
 
+/** 「从文件读取」接受的文件大小上限 */
+const PASTE_FILE_MAX_BYTES = 1024 * 1024;
+
+/** 把文件读成文本。用 FileReader 而不是 `file.text()`：后者不是哪儿都有 */
+function readFileText(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result ?? ""));
+    reader.onerror = () => reject(reader.error ?? new Error("read failed"));
+    reader.readAsText(file);
+  });
+}
+
 /** 新建的服务器一个应用都不启用 */
 const NO_APPS = Object.fromEntries(
   APP_IDS_WITH.mcp.map((app) => [app, false]),
@@ -155,6 +168,7 @@ const McpFormModal: React.FC<McpFormModalProps> = ({
   const [batchError, setBatchError] = useState(false);
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
+  const pasteFileRef = useRef<HTMLInputElement>(null);
 
   const errors: McpDraftErrors = useMemo(
     () =>
@@ -218,6 +232,28 @@ const McpFormModal: React.FC<McpFormModalProps> = ({
     setTab("form");
     setJsonError(null);
     setAttempted(false);
+  };
+
+  /**
+   * 从文件读配置：读出文本后和手动粘贴走同一条路（[`handlePaste`]）。
+   *
+   * 用的是浏览器自带的文件选择，文件只在界面里读成文本，不经过后端、也不记路径。
+   */
+  const handlePasteFile = async (file: File | undefined) => {
+    if (!file) return;
+    // 配置文件都是几 KB 的文本；挡掉误选的大文件，免得整个读进内存卡住界面
+    if (file.size > PASTE_FILE_MAX_BYTES) {
+      toast.error(t("mcpPage.drawer.pasteFileTooLarge"), { closeButton: true });
+      return;
+    }
+    try {
+      handlePaste(await readFileText(file));
+    } catch (error) {
+      toast.error(t("mcpPage.drawer.pasteFileFailed"), {
+        description: String(error),
+        closeButton: true,
+      });
+    }
   };
 
   const handlePaste = (text: string) => {
@@ -666,9 +702,35 @@ const McpFormModal: React.FC<McpFormModalProps> = ({
                 </div>
               </div>
               <div className="flex flex-col gap-1.5">
-                <label htmlFor="mcp-paste" className={LABEL_CLASS}>
-                  {t("mcpPage.drawer.paste")}
-                </label>
+                <div className="flex items-center gap-2">
+                  <label htmlFor="mcp-paste" className={LABEL_CLASS}>
+                    {t("mcpPage.drawer.paste")}
+                  </label>
+                  <Button
+                    type="button"
+                    variant="quiet"
+                    size="compact"
+                    className="ms-auto"
+                    onClick={() => pasteFileRef.current?.click()}
+                  >
+                    <FileUp className="h-3.5 w-3.5" strokeWidth={2} />
+                    {t("mcpPage.drawer.pasteFromFile")}
+                  </Button>
+                  {/* 真正的文件选择框藏着，由上面的按钮触发 */}
+                  <input
+                    ref={pasteFileRef}
+                    type="file"
+                    accept=".json,.jsonc,.toml,.txt,application/json,text/plain"
+                    aria-label={t("mcpPage.drawer.pasteFromFile")}
+                    className="hidden"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      // 清掉选择，同一个文件改完再选一次也能触发
+                      event.target.value = "";
+                      void handlePasteFile(file);
+                    }}
+                  />
+                </div>
                 <textarea
                   id="mcp-paste"
                   value={pasteText}

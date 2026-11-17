@@ -106,6 +106,74 @@ describe("McpFormModal (drawer)", () => {
     expect(onSave).toHaveBeenCalled();
   });
 
+  it("reads a config file and treats it exactly like a paste", async () => {
+    renderForm();
+    const file = new File(
+      [
+        JSON.stringify({
+          mcpServers: {
+            fetch: { command: "uvx", args: ["mcp-server-fetch"] },
+          },
+        }),
+      ],
+      "mcp.json",
+      { type: "application/json" },
+    );
+    await userEvent.upload(
+      screen.getByLabelText("mcpPage.drawer.pasteFromFile", {
+        selector: "input",
+      }),
+      file,
+    );
+
+    // 和粘贴一样：识别出来就填进表单，输入框不留原文
+    await waitFor(() => expect(el("mcp-name")).toHaveValue("fetch"));
+    expect(el("mcp-cmd")).toHaveValue("uvx");
+    expect(screen.getByLabelText("mcpPage.drawer.paste")).toHaveValue("");
+  });
+
+  it("leaves an unrecognized file in the paste box with the usual hint", async () => {
+    renderForm();
+    const file = new File(["this is not a config"], "notes.txt", {
+      type: "text/plain",
+    });
+    await userEvent.upload(
+      screen.getByLabelText("mcpPage.drawer.pasteFromFile", {
+        selector: "input",
+      }),
+      file,
+    );
+
+    // 认不出来时内容留在框里让人看见读到了什么，名称不该被乱填
+    await waitFor(() =>
+      expect(screen.getByLabelText("mcpPage.drawer.paste")).toHaveValue(
+        "this is not a config",
+      ),
+    );
+    expect(el("mcp-name")).toHaveValue("");
+  });
+
+  it("refuses a file too large to be a config without reading it", async () => {
+    renderForm();
+    const big = new File([new Uint8Array(1024 * 1024 + 1)], "huge.json", {
+      type: "application/json",
+    });
+    await userEvent.upload(
+      screen.getByLabelText("mcpPage.drawer.pasteFromFile", {
+        selector: "input",
+      }),
+      big,
+    );
+
+    await waitFor(() =>
+      expect(mocks.toastError).toHaveBeenCalledWith(
+        "mcpPage.drawer.pasteFileTooLarge",
+        expect.anything(),
+      ),
+    );
+    expect(screen.getByLabelText("mcpPage.drawer.paste")).toHaveValue("");
+  });
+
   it("shows field errors instead of saving when required fields are empty", async () => {
     renderForm();
     await userEvent.click(addButton());
