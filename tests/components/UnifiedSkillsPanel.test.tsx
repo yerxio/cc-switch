@@ -138,7 +138,6 @@ vi.mock("@/hooks/useProjectScope", () => ({
     projectId: m.scopeProjectId,
     select: m.selectScope,
   }),
-  useProjectCandidates: () => ({ data: [] }),
   useAddScopedProject: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useRemoveScopedProject: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useProjectScopeState: () => ({

@@ -105,19 +105,6 @@ impl ScopedProject {
     }
 }
 
-/// 从会话历史里发现的候选项目（用户不用手填路径）
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ProjectCandidate {
-    pub path: String,
-    pub name: String,
-    /// 哪些应用在这个目录里有过会话
-    pub apps: Vec<String>,
-    pub last_active_at: Option<i64>,
-    /// 是否已经加入受管列表
-    pub managed: bool,
-}
-
 /// Codex 的项目信任状态。只读 `~/.codex/config.toml`，从不写。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -377,65 +364,6 @@ impl ProjectScopeService {
         db.delete_scoped_project(id)?;
         log::info!("项目级作用域：移出项目 {}（cleanup={cleanup}）", row.path);
         Ok(failures)
-    }
-
-    /// 从会话历史里发现候选项目目录。只看 Claude Code 与 Codex 的会话。
-    pub fn discover_candidates(db: &Arc<Database>) -> Result<Vec<ProjectCandidate>, AppError> {
-        let managed: BTreeSet<String> = db
-            .list_scoped_projects()?
-            .into_iter()
-            .map(|row| row.path)
-            .collect();
-
-        // provider_id → 项目级应用。会话模块用的就是这两个 id。
-        let mut grouped: BTreeMap<String, (BTreeSet<String>, Option<i64>)> = BTreeMap::new();
-        for session in crate::session_manager::scan_sessions() {
-            let app = match session.provider_id.as_str() {
-                "claude" => "claude",
-                "codex" => "codex",
-                _ => continue,
-            };
-            let Some(dir) = session.project_dir.as_deref() else {
-                continue;
-            };
-            let path = PathBuf::from(dir);
-            if !path.is_dir() {
-                continue;
-            }
-            let key = fs::canonicalize(&path)
-                .map(strip_unc_prefix)
-                .unwrap_or(path)
-                .to_string_lossy()
-                .to_string();
-            let entry = grouped.entry(key).or_default();
-            entry.0.insert(app.to_string());
-            if let Some(active) = session.last_active_at {
-                entry.1 = Some(entry.1.map_or(active, |current: i64| current.max(active)));
-            }
-        }
-
-        let mut out: Vec<ProjectCandidate> = grouped
-            .into_iter()
-            .map(|(path, (apps, last_active_at))| {
-                let as_path = PathBuf::from(&path);
-                ProjectCandidate {
-                    name: Self::default_name(&as_path),
-                    managed: managed.contains(&path),
-                    path,
-                    apps: apps.into_iter().collect(),
-                    last_active_at,
-                }
-            })
-            .collect();
-        // 最近活跃的排前面，没有时间戳的垫底
-        out.sort_by(|left, right| {
-            right
-                .last_active_at
-                .unwrap_or(i64::MIN)
-                .cmp(&left.last_active_at.unwrap_or(i64::MIN))
-                .then_with(|| left.name.cmp(&right.name))
-        });
-        Ok(out)
     }
 
     // ======================= 状态读取 =======================

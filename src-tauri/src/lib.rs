@@ -1795,7 +1795,6 @@ pub fn run() {
             // 项目级作用域：把受管的 MCP / Skills 投影进单个仓库
             commands::open_project_directory_dialog,
             commands::list_scoped_projects,
-            commands::discover_scoped_project_candidates,
             commands::add_scoped_project,
             commands::rename_scoped_project,
             commands::remove_scoped_project,

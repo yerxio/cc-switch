@@ -21,16 +21,6 @@ export interface ScopedProject {
   exists: boolean;
 }
 
-/** 从会话历史里发现的候选项目（用户不用手填路径） */
-export interface ProjectCandidate {
-  path: string;
-  name: string;
-  /** 哪些应用在这个目录里有过会话 */
-  apps: string[];
-  lastActiveAt?: number | null;
-  managed: boolean;
-}
-
 /** Codex 只在受信任的项目里加载 `.codex/` 层；这里只读、从不代写 */
 export type CodexTrust = "trusted" | "untrusted" | "unknown";
 
@@ -100,11 +90,6 @@ export const projectScopeApi = {
   /** 受管项目列表 */
   async listProjects(): Promise<ScopedProject[]> {
     return await invoke("list_scoped_projects");
-  },
-
-  /** 从 Claude Code / Codex 的会话历史里发现候选项目目录 */
-  async discoverCandidates(): Promise<ProjectCandidate[]> {
-    return await invoke("discover_scoped_project_candidates");
   },
 
   /** 加入受管项目（同路径重复加是幂等的） */

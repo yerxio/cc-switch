@@ -5,8 +5,8 @@
 
 use super::run_db_task;
 use crate::services::project_scope::{
-    ProjectApp, ProjectCandidate, ProjectScopeService, ProjectScopeState, ResyncFailure,
-    ResyncReport, ScopedProject, ToggleOutcome,
+    ProjectApp, ProjectScopeService, ProjectScopeState, ResyncFailure, ResyncReport, ScopedProject,
+    ToggleOutcome,
 };
 use crate::store::AppState;
 use tauri::State;
@@ -28,17 +28,6 @@ pub async fn list_scoped_projects(
 ) -> Result<Vec<ScopedProject>, String> {
     run_db_task(&app_state, |state| {
         ProjectScopeService::list_projects(&state.db).map_err(|e| e.to_string())
-    })
-    .await
-}
-
-/// 从会话历史里发现候选项目目录（Claude Code / Codex 用过的工作目录）
-#[tauri::command]
-pub async fn discover_scoped_project_candidates(
-    app_state: State<'_, AppState>,
-) -> Result<Vec<ProjectCandidate>, String> {
-    run_db_task(&app_state, |state| {
-        ProjectScopeService::discover_candidates(&state.db).map_err(|e| e.to_string())
     })
     .await
 }

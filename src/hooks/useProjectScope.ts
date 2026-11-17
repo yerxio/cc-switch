@@ -24,16 +24,6 @@ export function useScopedProjects() {
   });
 }
 
-/** 候选项目来自会话历史，扫描有成本，只在打开选择器时才拉 */
-export function useProjectCandidates(enabled: boolean) {
-  return useQuery({
-    queryKey: [...PROJECT_SCOPE_KEY, "candidates"],
-    queryFn: () => projectScopeApi.discoverCandidates(),
-    enabled,
-    staleTime: 60_000,
-  });
-}
-
 export function useProjectScopeState(projectId: string | null) {
   return useQuery({
     queryKey: [...PROJECT_SCOPE_KEY, "state", projectId],

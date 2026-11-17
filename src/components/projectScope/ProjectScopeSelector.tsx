@@ -17,7 +17,6 @@ import { SegmentedControl } from "@/components/ui/segmented-control";
 import { cn } from "@/lib/utils";
 import {
   useAddScopedProject,
-  useProjectCandidates,
   useRemoveScopedProject,
 } from "@/hooks/useProjectScope";
 import type { ScopedProject } from "@/lib/api/projectScope";
@@ -28,8 +27,7 @@ import type { ScopedProject } from "@/lib/api/projectScope";
  * 选到项目后，面板的矩阵从「12 个工具」收窄为「Claude Code / Codex」两列，行还是
  * 同一批条目——交互不变，变的只是写到哪里。
  *
- * 候选项目有两个来源：手动选目录，以及会话历史里 Claude Code / Codex 用过的工作
- * 目录（白捡的数据，用户不用自己翻路径）。
+ * 项目只由用户自己选目录加入：不去会话历史里猜，也不碰会话那边的任何东西。
  */
 export function ProjectScopeSelector({
   projects,
@@ -46,9 +44,6 @@ export function ProjectScopeSelector({
   const [menuOpen, setMenuOpen] = React.useState(false);
   const addProject = useAddScopedProject();
   const removeProject = useRemoveScopedProject();
-  // 扫描会话历史有成本，只在菜单打开过之后才拉
-  const [candidatesWanted, setCandidatesWanted] = React.useState(false);
-  const { data: candidates } = useProjectCandidates(candidatesWanted);
 
   const selected = projects?.find((project) => project.id === projectId);
   const busy = disabled || addProject.isPending || removeProject.isPending;
@@ -93,10 +88,6 @@ export function ProjectScopeSelector({
     }
   };
 
-  const unmanagedCandidates = (candidates ?? []).filter(
-    (candidate) => !candidate.managed,
-  );
-
   return (
     <div className="flex min-w-0 items-center gap-2">
       <SegmentedControl
@@ -122,18 +113,12 @@ export function ProjectScopeSelector({
             onSelect(projects[0].id);
             return;
           }
-          setCandidatesWanted(true);
+          // 还没有受管项目：直接把选择器打开，让用户去加一个
           setMenuOpen(true);
         }}
       />
 
-      <DropdownMenu
-        open={menuOpen}
-        onOpenChange={(open) => {
-          setMenuOpen(open);
-          if (open) setCandidatesWanted(true);
-        }}
-      >
+      <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
         <DropdownMenuTrigger asChild>
           <Button
             type="button"
@@ -197,28 +182,6 @@ export function ProjectScopeSelector({
                   >
                     <Trash2 className="h-3.5 w-3.5" strokeWidth={2} />
                   </Button>
-                </DropdownMenuItem>
-              ))}
-              <DropdownMenuSeparator />
-            </>
-          )}
-
-          {unmanagedCandidates.length > 0 && (
-            <>
-              <DropdownMenuLabel>
-                {t("projectScope.recentProjects")}
-              </DropdownMenuLabel>
-              {unmanagedCandidates.slice(0, 8).map((candidate) => (
-                <DropdownMenuItem
-                  key={candidate.path}
-                  onSelect={() => void handleAdd(candidate.path)}
-                >
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate">{candidate.name}</span>
-                    <span className="block truncate text-caption text-fg-2">
-                      {candidate.path}
-                    </span>
-                  </span>
                 </DropdownMenuItem>
               ))}
               <DropdownMenuSeparator />
