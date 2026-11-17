@@ -40,6 +40,7 @@ import {
   FolderHeaderRow,
   FolderNameDialog,
   MoveToFolderMenu,
+  MoveToFolderSubmenu,
 } from "@/components/common/folders";
 import { ProjectScopeMatrix } from "@/components/projectScope/ProjectScopeMatrix";
 import {
@@ -528,7 +529,12 @@ const UnifiedMcpPanel: React.FC<UnifiedMcpPanelProps> = ({
           : t("mcpFolders.toast.movedOut", { count: ids.length }),
         { closeButton: true },
       );
-      setSelected(new Set());
+      // 只把这次挪走的从勾选里去掉：从行菜单挪一个，不该清掉别的行的勾
+      setSelected((prev) => {
+        const next = new Set(prev);
+        for (const id of ids) next.delete(id);
+        return next;
+      });
     } catch (error) {
       toast.error(t("mcpFolders.toast.failed"), {
         description: String(error),
@@ -1423,6 +1429,23 @@ const UnifiedMcpPanel: React.FC<UnifiedMcpPanelProps> = ({
                                           {t("mcpPage.openDocs")}
                                         </DropdownMenuItem>
                                       )}
+                                      <MoveToFolderSubmenu
+                                        ns="mcpFolders"
+                                        folders={folders}
+                                        currentFolderId={folderAssignments[id]}
+                                        onPick={(folderId) =>
+                                          void handleMoveToFolder(
+                                            [id],
+                                            folderId,
+                                          )
+                                        }
+                                        onCreate={() =>
+                                          setFolderDialog({
+                                            mode: "create",
+                                            moveIds: [id],
+                                          })
+                                        }
+                                      />
                                       <DropdownMenuItem
                                         onSelect={() =>
                                           void handleRowAll(id, server, true)

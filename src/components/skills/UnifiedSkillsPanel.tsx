@@ -71,6 +71,7 @@ import {
   FolderHeaderRow,
   FolderNameDialog,
   MoveToFolderMenu,
+  MoveToFolderSubmenu,
   UNFILED_KEY,
 } from "@/components/common/folders";
 import { copyText } from "@/lib/clipboard";
@@ -665,7 +666,12 @@ const UnifiedSkillsPanel: React.FC<UnifiedSkillsPanelProps> = ({
           : t("skillFolders.toast.movedOut", { count: ids.length }),
         { closeButton: true },
       );
-      setSelected(new Set());
+      // 只把这次挪走的从勾选里去掉：从行菜单挪一个，不该清掉别的行的勾
+      setSelected((prev) => {
+        const next = new Set(prev);
+        for (const id of ids) next.delete(id);
+        return next;
+      });
     } catch (error) {
       toast.error(t("skillFolders.toast.failed"), {
         description: String(error),
@@ -1645,6 +1651,14 @@ const UnifiedSkillsPanel: React.FC<UnifiedSkillsPanelProps> = ({
                     <InstalledRow
                       key={skill.id}
                       skill={skill}
+                      folders={folders}
+                      folderId={folderAssignments[skill.id]}
+                      onMove={(folderId) =>
+                        void handleMoveToFolder([skill.id], folderId)
+                      }
+                      onCreateFolder={() =>
+                        setFolderDialog({ mode: "create", moveIds: [skill.id] })
+                      }
                       first={index === 0}
                       appIds={appIds}
                       checked={selected.has(skill.id)}
@@ -2244,6 +2258,11 @@ UnifiedSkillsPanel.displayName = "UnifiedSkillsPanel";
 // ─── 已安装的一行 ────────────────────────────────────────────────────────
 interface InstalledRowProps {
   skill: InstalledSkill;
+  /** 行菜单里的「移动到 ▸」要用 */
+  folders: SkillFolder[];
+  folderId: string | undefined;
+  onMove: (folderId: string | null) => void;
+  onCreateFolder: () => void;
   first: boolean;
   appIds: AppId[];
   checked: boolean;
@@ -2268,6 +2287,10 @@ interface InstalledRowProps {
 
 function InstalledRow({
   skill,
+  folders,
+  folderId,
+  onMove,
+  onCreateFolder,
   first,
   appIds,
   checked,
@@ -2461,6 +2484,13 @@ function InstalledRow({
             <DropdownMenuItem onSelect={onOpenDir}>
               {t("skillsPage.openDir")}
             </DropdownMenuItem>
+            <MoveToFolderSubmenu
+              ns="skillFolders"
+              folders={folders}
+              currentFolderId={folderId}
+              onPick={onMove}
+              onCreate={onCreateFolder}
+            />
             <DropdownMenuSeparator />
             <DropdownMenuItem
               className="text-danger-text focus:text-danger-text"

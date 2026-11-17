@@ -1,6 +1,7 @@
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import {
+  Check,
   ChevronDown,
   ChevronRight,
   Folder as FolderIcon,
@@ -17,6 +18,9 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { HoverTip } from "@/components/ui/hover-tip";
@@ -343,6 +347,64 @@ export function MoveToFolderMenu({
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+}
+
+/**
+ * 条目行自己的「⋯」菜单里的「移动到 ▸」：不用先打勾再去找批量栏，单个条目直接挪。
+ *
+ * 当前所在的文件夹前面打勾；已经在文件夹里时才有「移出文件夹」。
+ */
+export function MoveToFolderSubmenu({
+  ns,
+  folders,
+  currentFolderId,
+  onPick,
+  onCreate,
+}: {
+  ns: FolderNamespace;
+  folders: Folder[];
+  /** 这个条目现在所在的文件夹；不在任何文件夹里是 `undefined` */
+  currentFolderId: string | undefined;
+  onPick: (folderId: string | null) => void;
+  onCreate: () => void;
+}) {
+  const { t } = useTranslation();
+  const inFolder = folders.some((folder) => folder.id === currentFolderId);
+  return (
+    <DropdownMenuSub>
+      <DropdownMenuSubTrigger>{t(`${ns}.moveTo`)}</DropdownMenuSubTrigger>
+      <DropdownMenuSubContent className="max-h-[320px] min-w-[200px] overflow-y-auto">
+        {folders.map((folder) => {
+          const current = folder.id === currentFolderId;
+          return (
+            <DropdownMenuItem
+              key={folder.id}
+              // 已经在这个文件夹里：点了也没事可做
+              disabled={current}
+              onSelect={() => onPick(folder.id)}
+            >
+              <Check
+                aria-hidden="true"
+                className={cn("h-4 w-4", current ? "opacity-100" : "opacity-0")}
+                strokeWidth={2.5}
+              />
+              <span className="min-w-0 truncate">{folder.name}</span>
+            </DropdownMenuItem>
+          );
+        })}
+        {inFolder && (
+          <DropdownMenuItem onSelect={() => onPick(null)}>
+            {t(`${ns}.moveOut`)}
+          </DropdownMenuItem>
+        )}
+        {folders.length > 0 && <DropdownMenuSeparator />}
+        <DropdownMenuItem onSelect={onCreate}>
+          <FolderPlus className="h-4 w-4" strokeWidth={1.75} />
+          {t(`${ns}.newFolderEllipsis`)}
+        </DropdownMenuItem>
+      </DropdownMenuSubContent>
+    </DropdownMenuSub>
   );
 }
 

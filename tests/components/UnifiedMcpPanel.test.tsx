@@ -843,6 +843,34 @@ describe("UnifiedMcpPanel", () => {
       );
     });
 
+    it("moves a single server from its own row menu, without ticking anything", async () => {
+      withFolders();
+      renderPanel();
+
+      // gamma 在「未分类」：行菜单 → 移动到 → Databases
+      const gammaRow = screen
+        .getAllByRole("listitem")
+        .find((row) => row.textContent?.includes("gamma")) as HTMLElement;
+      await userEvent.click(
+        within(gammaRow).getByRole("button", { name: "mcpPage.rowMoreAria" }),
+      );
+      await userEvent.click(
+        await screen.findByRole("menuitem", { name: "mcpFolders.moveTo" }),
+      );
+      await userEvent.click(
+        await screen.findByRole("menuitem", { name: "Databases" }),
+      );
+
+      await waitFor(() =>
+        expect(mocks.moveToFolder).toHaveBeenCalledWith({
+          itemIds: ["gamma"],
+          folderId: "f-db",
+        }),
+      );
+      // 点菜单不该顺带打开编辑抽屉
+      expect(screen.queryByTestId("mcp-drawer")).toBeNull();
+    });
+
     it("selects a whole folder from its row, collapsed or not", async () => {
       withFolders();
       renderPanel();
