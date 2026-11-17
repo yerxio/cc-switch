@@ -548,7 +548,7 @@ Jedes Verzeichnis im ZIP, das eine `SKILL.md` enthält, ist ein Skill und heißt
 ```
 my-skills.zip
 ├── cc-switch-skills.json     # optionales Manifest
-├── solo-skill/               # im Stammverzeichnis → ohne Ordner
+├── solo-skill/               # im Stammverzeichnis → Ordner mit dem Namen des ZIP
 │   └── SKILL.md
 └── Web/                      # übergeordnetes Verzeichnis → Ordner „Web“
     ├── xss-testing/
@@ -557,9 +557,9 @@ my-skills.zip
         └── SKILL.md
 ```
 
-- Das **direkt übergeordnete Verzeichnis** eines Skills wird sein Ordner; ein Skill direkt im Stammverzeichnis erhält keinen. Ordner haben nur eine Ebene, bei tieferer Verschachtelung zählt also nur die Ebene, die dem Skill am nächsten liegt.
+- Das **direkt übergeordnete Verzeichnis** eines Skills wird sein Ordner; ein Skill direkt im Stammverzeichnis kommt in einen Ordner mit dem Namen der ZIP-Datei. Ordner haben nur eine Ebene, bei tieferer Verschachtelung zählt also nur die Ebene, die dem Skill am nächsten liegt.
 - Liegen alle Skills unter demselben einzigen Verzeichnis der obersten Ebene, gilt diese Ebene als Verpackung (etwa das `repo-main/` eines GitHub-Downloads) und nicht als Ordner.
-- Das Manifest `cc-switch-skills.json` enthält `{"version": 1, "folders": {"<skill-dir>": "<folder name>"}}`. Ist es vorhanden, hat es Vorrang; CC Switch schreibt es beim Export, und es stellt auch Ordnernamen mit Zeichen wieder her, die ein Verzeichnisname nicht enthalten kann, etwa `/` oder `:`.
+- Das Manifest `cc-switch-skills.json` enthält `{"version": 1, "folders": {"<skill-dir>": "<folder name>"}}`. Ist es vorhanden, hat es Vorrang, und ein darin nicht genannter Skill bleibt ohne Ordner; CC Switch schreibt es beim Export, und es stellt auch Ordnernamen mit Zeichen wieder her, die ein Verzeichnisname nicht enthalten kann, etwa `/` oder `:`.
 - Ordner sind nur eine Gruppierung innerhalb von CC Switch: Jedes Werkzeug lädt das flache `<skills>/<name>/SKILL.md`, daher entsteht unter `~/.claude/skills` und Ähnlichem nie ein verschachteltes Verzeichnis.
 - Die Installation aus einem ZIP importiert nur in CC Switch und aktiviert nichts; Skills, deren Verzeichnisname bereits vergeben ist, werden übersprungen.
 

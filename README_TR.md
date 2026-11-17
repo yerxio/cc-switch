@@ -548,7 +548,7 @@ ZIP içinde `SKILL.md` barındıran her dizin bir Beceridir ve adını dizinden 
 ```
 my-skills.zip
 ├── cc-switch-skills.json     # isteğe bağlı bildirim
-├── solo-skill/               # kökte → sınıflandırılmamış
+├── solo-skill/               # kökte → ZIP adını taşıyan klasör
 │   └── SKILL.md
 └── Web/                      # üst dizin → "Web" klasörü
     ├── xss-testing/
@@ -557,9 +557,9 @@ my-skills.zip
         └── SKILL.md
 ```
 
-- Bir Becerinin **hemen üstündeki dizin** onun klasörü olur; doğrudan kökte duran Beceri klasöre girmez. Klasörler tek düzeydir, daha derin iç içe yapılarda yalnızca Beceriye en yakın düzey sayılır.
+- Bir Becerinin **hemen üstündeki dizin** onun klasörü olur; doğrudan kökte duran Beceri, ZIP dosyasının adını taşıyan klasöre girer. Klasörler tek düzeydir, daha derin iç içe yapılarda yalnızca Beceriye en yakın düzey sayılır.
 - Tüm Beceriler aynı tek üst düzey dizinin altındaysa, o düzey paketleme kabuğu (örneğin GitHub indirmesindeki `repo-main/`) sayılır ve klasör olarak kabul edilmez.
-- `cc-switch-skills.json` bildiriminin içeriği `{"version": 1, "folders": {"<skill-dir>": "<folder name>"}}` biçimindedir. Varsa o geçerlidir; CC Switch dışa aktarırken otomatik yazar ve `/` veya `:` gibi dizin adında kullanılamayan karakterler içeren klasör adlarını aynen geri getiren de odur.
+- `cc-switch-skills.json` bildiriminin içeriği `{"version": 1, "folders": {"<skill-dir>": "<folder name>"}}` biçimindedir. Varsa o geçerlidir ve içinde geçmeyen Beceri sınıflandırılmamış kalır; CC Switch dışa aktarırken otomatik yazar ve `/` veya `:` gibi dizin adında kullanılamayan karakterler içeren klasör adlarını aynen geri getiren de odur.
 - Klasörler yalnızca CC Switch içindeki bir gruplamadır: her araç düz `<skills>/<ad>/SKILL.md` yolunu yükler, bu yüzden `~/.claude/skills` ve benzerlerinin altında asla iç içe dizin oluşturulmaz.
 - ZIP'ten yüklemek yalnızca CC Switch'e aktarır ve hiçbir araçta etkinleştirmez; dizin adı zaten kullanılan Beceriler atlanır.
 

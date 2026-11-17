@@ -550,7 +550,7 @@ ZIP 里每个含 `SKILL.md` 的目录就是一个 Skill，目录名就是它的�
 ```
 my-skills.zip
 ├── cc-switch-skills.json     # 可选的清单
-├── solo-skill/               # 在根目录 → 未分类
+├── solo-skill/               # 在根目录 → 以压缩包命名的文件夹
 │   └── SKILL.md
 └── Web/                      # 上一级目录 → 文件夹「Web」
     ├── xss-testing/
@@ -559,9 +559,9 @@ my-skills.zip
         └── SKILL.md
 ```
 
-- Skill 的**直接上级目录**会成为它的文件夹；直接放在根目录的不进文件夹。文件夹只有一层，嵌得更深时只取最靠近 Skill 的那一级。
+- Skill 的**直接上级目录**会成为它的文件夹；直接放在根目录的，放进以压缩包文件名命名的文件夹。文件夹只有一层，嵌得更深时只取最靠近 Skill 的那一级。
 - 所有 Skill 都在同一个顶层目录下时，这一层会被当作打包的外壳（比如 GitHub 下载包里的 `repo-main/`），不算文件夹。
-- 清单 `cc-switch-skills.json` 的内容是 `{"version": 1, "folders": {"<skill-dir>": "<folder name>"}}`。有清单时以清单为准；CC Switch 导出时会自动写入，文件夹名里有 `/`、`:` 这类不能当目录名的字符时靠它原样还原。
+- 清单 `cc-switch-skills.json` 的内容是 `{"version": 1, "folders": {"<skill-dir>": "<folder name>"}}`。有清单时以清单为准，清单没提到的 Skill 留在未分类；CC Switch 导出时会自动写入，文件夹名里有 `/`、`:` 这类不能当目录名的字符时靠它原样还原。
 - 文件夹只是 CC Switch 里的分组：各工具只认扁平的 `<skills>/<名字>/SKILL.md`，所以不会在 `~/.claude/skills` 之类的目录里生成嵌套目录。
 - 从 ZIP 安装只导入到 CC Switch，不会自动在任何工具里启用；目录名已被占用的 Skill 会被跳过。
 

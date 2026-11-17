@@ -4852,8 +4852,17 @@ impl SkillService {
             )));
         }
 
-        // ZIP 里的层级（或导出时写的清单）决定每个 Skill 进哪个文件夹
-        let folder_hints = crate::services::skill_folder::infer_folders(temp_dir, &skill_dirs);
+        // ZIP 里的层级（或导出时写的清单）决定每个 Skill 进哪个文件夹；层级里没有
+        // 文件夹可用的（直接在根目录的）进以压缩包命名的文件夹
+        let zip_folder = zip_path
+            .file_stem()
+            .and_then(|stem| stem.to_str())
+            .and_then(crate::services::skill_folder::folder_name_from_zip_stem);
+        let folder_hints = crate::services::skill_folder::infer_folders(
+            temp_dir,
+            &skill_dirs,
+            zip_folder.as_deref(),
+        );
         let mut folder_members: BTreeMap<String, Vec<String>> = BTreeMap::new();
 
         let _state_guard = skill_state_write_guard();

@@ -14,7 +14,8 @@
 //! 另在根目录放一份清单 [`MANIFEST_NAME`] 记下每个 Skill 归哪个文件夹。
 //!
 //! 导入：有清单按清单（文件夹名可以含不能当目录名的字符，目录名只是近似）；
-//! 没有清单——别处来的 ZIP——按目录层级推断，见 [`infer_folders`]。
+//! 没有清单——别处来的 ZIP——按目录层级推断，层级里没有文件夹可用的（直接放在
+//! 根目录的）进以压缩包命名的文件夹，见 [`infer_folders`]。
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fs;
@@ -32,6 +33,8 @@ use crate::services::skill::SkillService;
 /// ZIP 根目录里的清单文件名
 pub const MANIFEST_NAME: &str = "cc-switch-skills.json";
 const MANIFEST_VERSION: u32 = 1;
+/// 以压缩包命名的文件夹，名字最多取这么多字符（文件夹名的上限）
+const ZIP_FOLDER_NAME_MAX_CHARS: usize = 64;
 /// Skill 文件夹就是通用文件夹用在 Skills 上
 pub use crate::services::folders::{Folder as SkillFolder, FoldersState as SkillFoldersState};
 
@@ -242,12 +245,20 @@ fn add_dir_to_zip(
 
 /// 给解压出来的每个 Skill 目录定一个文件夹名（定不出来的不在返回值里）。
 ///
-/// 1. 根目录有清单 → 按清单（键是 Skill 的目录名）。
+/// 1. 根目录有清单 → 按清单（键是 Skill 的目录名）。清单是权威的：它没提到的
+///    Skill 在导出时就是未分类，这里原样留在未分类，导出再导入才能还原。
 /// 2. 否则按层级推断：Skill 的**直接上级目录**就是它的文件夹。两个例外——
-///    - Skill 直接在根目录：没有文件夹；
 ///    - 所有 Skill 都挤在同一个顶层目录下（GitHub 打的包常见的 `repo-main/…`）：
-///      那一层是包装，不算文件夹，剥掉再看。
-pub fn infer_folders(root: &Path, skill_dirs: &[PathBuf]) -> HashMap<PathBuf, String> {
+///      那一层是包装，不算文件夹，剥掉再看；
+///    - Skill 直接在根目录（或剥掉包装后在根目录）：层级里没有文件夹可用，
+///      放进 `fallback`——以压缩包命名的文件夹。一个 ZIP 就是一批东西，散进
+///      「未分类」的话和原来就在那儿的混在一起，事后分不出哪些是这次导入的。
+///      `fallback` 为 `None` 时才留在未分类。
+pub fn infer_folders(
+    root: &Path,
+    skill_dirs: &[PathBuf],
+    fallback: Option<&str>,
+) -> HashMap<PathBuf, String> {
     let mut out = HashMap::new();
 
     if let Some(manifest) = read_manifest(root) {
@@ -290,16 +301,33 @@ pub fn infer_folders(root: &Path, skill_dirs: &[PathBuf]) -> HashMap<PathBuf, St
 
     for (dir, parts) in relative {
         let parts = &parts[skip.min(parts.len())..];
-        if parts.len() < 2 {
-            continue;
+        let parent = (parts.len() >= 2)
+            .then(|| &parts[parts.len() - 2])
+            .filter(|parent| !parent.starts_with('.') && parent.as_str() != "__MACOSX");
+        match (parent, fallback) {
+            (Some(parent), _) => {
+                out.insert(dir.clone(), parent.clone());
+            }
+            (None, Some(fallback)) => {
+                out.insert(dir.clone(), fallback.to_string());
+            }
+            (None, None) => {}
         }
-        let parent = &parts[parts.len() - 2];
-        if parent.starts_with('.') || parent == "__MACOSX" {
-            continue;
-        }
-        out.insert(dir.clone(), parent.clone());
     }
     out
+}
+
+/// 把压缩包文件名变成可用的文件夹名：去掉首尾空白，超长就截断。
+/// 截出来是空的（文件名全是空白之类）就没有可用的名字。
+pub fn folder_name_from_zip_stem(stem: &str) -> Option<String> {
+    let name: String = stem
+        .trim()
+        .chars()
+        .filter(|ch| !ch.is_control())
+        .take(ZIP_FOLDER_NAME_MAX_CHARS)
+        .collect();
+    let name = name.trim();
+    (!name.is_empty()).then(|| name.to_string())
 }
 
 fn read_manifest(root: &Path) -> Option<Manifest> {
@@ -526,13 +554,100 @@ mod tests {
         };
         assert_eq!(name_of("local:alpha").as_deref(), Some("逆向/分析: 工具"));
         assert_eq!(name_of("local:beta").as_deref(), Some("Web"));
-        assert_eq!(name_of("local:loose"), None, "没分类的还是没分类");
+        assert_eq!(
+            name_of("local:loose"),
+            None,
+            "有清单时清单说了算：导出时没分类的不该被塞进以压缩包命名的文件夹"
+        );
+        assert!(
+            !state.folders.iter().any(|folder| folder.name == "export"),
+            "带清单的 ZIP 不该凭文件名多建一个文件夹"
+        );
 
         // 嵌套文件跟着走了，且存储目录仍是扁平的
         let ssot = SkillService::get_ssot_dir().expect("ssot");
         assert!(ssot.join("alpha").join("scripts").join("run.sh").is_file());
         assert!(ssot.join("loose").join("SKILL.md").is_file());
         assert!(!ssot.join("Web").exists(), "文件夹不该变成磁盘目录");
+    }
+
+    /// 没有清单的 ZIP：根目录的 Skill 进以压缩包命名的文件夹，带分类目录的照旧
+    #[test]
+    #[serial_test::serial]
+    fn root_level_skills_from_a_plain_zip_land_in_a_folder_named_after_it() {
+        use zip::write::SimpleFileOptions;
+
+        let (home, _guard, db) = setup();
+        let zip_path = home.path().join("  安全工具合集  .zip");
+        {
+            let file = fs::File::create(&zip_path).expect("create zip");
+            let mut zip = zip::ZipWriter::new(file);
+            let options = SimpleFileOptions::default();
+            for entry in ["solo/SKILL.md", "other/SKILL.md", "Web/xss/SKILL.md"] {
+                zip.start_file(entry, options).expect("start file");
+                let name = entry.rsplit('/').nth(1).expect("skill dir");
+                zip.write_all(format!("---\nname: {name}\ndescription: t\n---\n").as_bytes())
+                    .expect("write");
+            }
+            zip.finish().expect("finish zip");
+        }
+
+        let result = SkillService::install_from_zip(&db, &zip_path, None).expect("import");
+        assert_eq!(result.installed.len(), 3);
+
+        let state = SkillFolderService::state(&db).expect("state");
+        let name_of = |skill_id: &str| {
+            state.assignments.get(skill_id).and_then(|folder_id| {
+                state
+                    .folders
+                    .iter()
+                    .find(|folder| &folder.id == folder_id)
+                    .map(|folder| folder.name.clone())
+            })
+        };
+        // 文件名两端的空白去掉了
+        assert_eq!(name_of("local:solo").as_deref(), Some("安全工具合集"));
+        assert_eq!(name_of("local:other").as_deref(), Some("安全工具合集"));
+        assert_eq!(name_of("local:xss").as_deref(), Some("Web"));
+        assert_eq!(state.assignments.len(), 3, "这次导入的没有一个落进未分类");
+
+        // 再导一个同名压缩包里的新 Skill：并进已有的同名文件夹，不重复建
+        let again = home.path().join("more").join("安全工具合集.zip");
+        fs::create_dir_all(again.parent().expect("parent")).expect("mkdir");
+        {
+            let file = fs::File::create(&again).expect("create zip");
+            let mut zip = zip::ZipWriter::new(file);
+            zip.start_file("third/SKILL.md", SimpleFileOptions::default())
+                .expect("start file");
+            zip.write_all(b"---\nname: third\ndescription: t\n---\n")
+                .expect("write");
+            zip.finish().expect("finish zip");
+        }
+        SkillService::install_from_zip(&db, &again, None).expect("import again");
+        let state = SkillFolderService::state(&db).expect("state");
+        assert_eq!(
+            state
+                .folders
+                .iter()
+                .filter(|folder| folder.name == "安全工具合集")
+                .count(),
+            1
+        );
+    }
+
+    #[test]
+    fn a_zip_file_name_becomes_a_usable_folder_name() {
+        assert_eq!(
+            folder_name_from_zip_stem("  my pack  ").as_deref(),
+            Some("my pack")
+        );
+        assert_eq!(folder_name_from_zip_stem("   "), None);
+        // 超过文件夹名上限的截断，而不是让整次归类失败
+        let long = "长".repeat(100);
+        assert_eq!(
+            folder_name_from_zip_stem(&long).map(|name| name.chars().count()),
+            Some(64)
+        );
     }
 
     #[test]
@@ -562,17 +677,20 @@ mod tests {
             dir
         };
 
-        // 根目录的 Skill 没有文件夹；深一层的，直接上级就是文件夹
+        // 深一层的，直接上级就是文件夹；根目录的没有层级可用，进以压缩包命名的那个
         let at_root = mk("solo");
         let in_web = mk("Web/xss");
         let in_rev = mk("逆向/ida");
-        let hints = infer_folders(
-            root.path(),
-            &[at_root.clone(), in_web.clone(), in_rev.clone()],
-        );
-        assert_eq!(hints.get(&at_root), None);
+        let dirs = [at_root.clone(), in_web.clone(), in_rev.clone()];
+        let hints = infer_folders(root.path(), &dirs, Some("my-pack"));
+        assert_eq!(hints.get(&at_root).map(String::as_str), Some("my-pack"));
         assert_eq!(hints.get(&in_web).map(String::as_str), Some("Web"));
         assert_eq!(hints.get(&in_rev).map(String::as_str), Some("逆向"));
+
+        // 没有可用的压缩包名时，根目录的才留在未分类
+        let hints = infer_folders(root.path(), &dirs, None);
+        assert_eq!(hints.get(&at_root), None);
+        assert_eq!(hints.get(&in_web).map(String::as_str), Some("Web"));
     }
 
     /// GitHub 打的包外面常套一层 `repo-main/`：所有 Skill 共用的那一层是包装，不算文件夹
@@ -588,13 +706,25 @@ mod tests {
 
         let flat_a = mk("repo-main/a");
         let flat_b = mk("repo-main/b");
-        let hints = infer_folders(root.path(), &[flat_a.clone(), flat_b.clone()]);
-        assert!(hints.is_empty(), "只有包装层时谁都不进文件夹: {hints:?}");
+        let flat = [flat_a.clone(), flat_b.clone()];
+        // 包装层不是文件夹：剥掉后它们等于在根目录，进以压缩包命名的文件夹，
+        // 而不是进一个叫 repo-main 的文件夹
+        let hints = infer_folders(root.path(), &flat, Some("my-pack"));
+        assert_eq!(hints.get(&flat_a).map(String::as_str), Some("my-pack"));
+        assert_eq!(hints.get(&flat_b).map(String::as_str), Some("my-pack"));
+        assert!(
+            infer_folders(root.path(), &flat, None).is_empty(),
+            "没有压缩包名可用时，只有包装层就谁都不进文件夹"
+        );
 
         // 包装层里面还有真正的分类
         let nested = mk("repo-main/Web/xss");
-        let hints = infer_folders(root.path(), &[flat_a.clone(), nested.clone()]);
-        assert_eq!(hints.get(&flat_a), None);
+        let hints = infer_folders(
+            root.path(),
+            &[flat_a.clone(), nested.clone()],
+            Some("my-pack"),
+        );
+        assert_eq!(hints.get(&flat_a).map(String::as_str), Some("my-pack"));
         assert_eq!(hints.get(&nested).map(String::as_str), Some("Web"));
     }
 }

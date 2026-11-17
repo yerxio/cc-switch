@@ -548,7 +548,7 @@ Every directory in the ZIP that contains a `SKILL.md` is one Skill, named after 
 ```
 my-skills.zip
 ├── cc-switch-skills.json     # optional manifest
-├── solo-skill/               # at the root → unfiled
+├── solo-skill/               # at the root → folder named after the ZIP
 │   └── SKILL.md
 └── Web/                      # parent directory → folder "Web"
     ├── xss-testing/
@@ -557,9 +557,9 @@ my-skills.zip
         └── SKILL.md
 ```
 
-- A Skill's **immediate parent directory** becomes its folder; a Skill directly at the root gets none. Folders are one level deep, so with deeper nesting only the level closest to the Skill counts.
+- A Skill's **immediate parent directory** becomes its folder; a Skill directly at the root goes into a folder named after the ZIP file. Folders are one level deep, so with deeper nesting only the level closest to the Skill counts.
 - When every Skill sits under the same single top-level directory, that level is treated as packaging (the `repo-main/` in a GitHub download, for example) and not as a folder.
-- The manifest `cc-switch-skills.json` holds `{"version": 1, "folders": {"<skill-dir>": "<folder name>"}}`. When present it wins; CC Switch writes it on export, and it is what restores a folder name containing characters a directory name cannot hold, such as `/` or `:`.
+- The manifest `cc-switch-skills.json` holds `{"version": 1, "folders": {"<skill-dir>": "<folder name>"}}`. When present it wins, and a Skill it does not mention stays unfiled; CC Switch writes it on export, and it is what restores a folder name containing characters a directory name cannot hold, such as `/` or `:`.
 - Folders are only a grouping inside CC Switch: each tool loads the flat `<skills>/<name>/SKILL.md`, so no nested directory is ever created under `~/.claude/skills` and the like.
 - Installing from a ZIP only imports into CC Switch and enables nothing; Skills whose directory name is already taken are skipped.
 
