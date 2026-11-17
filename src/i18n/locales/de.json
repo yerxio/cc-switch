@@ -5505,6 +5505,7 @@
     "expandAria": "Ordner {{name}} aufklappen",
     "collapseAria": "Ordner {{name}} zuklappen",
     "moreAria": "Weitere Aktionen für Ordner {{name}}",
+    "selectAllAria": "Alle Skills im Ordner {{name}} auswählen",
     "cell": {
       "all": "{{name}} · {{app}}: alle aktiviert — klicken, um alle zu deaktivieren",
       "some": "{{name}} · {{app}}: einige aktiviert — klicken, um die übrigen zu aktivieren",

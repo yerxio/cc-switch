@@ -5505,6 +5505,7 @@
     "expandAria": "展開資料夾 {{name}}",
     "collapseAria": "摺疊資料夾 {{name}}",
     "moreAria": "資料夾 {{name}} 的更多操作",
+    "selectAllAria": "選取資料夾 {{name}} 裡的全部 Skill",
     "cell": {
       "all": "{{name}} · {{app}}：全部已啟用，點一下全部停用",
       "some": "{{name}} · {{app}}：部分已啟用，點一下把剩下的都啟用",

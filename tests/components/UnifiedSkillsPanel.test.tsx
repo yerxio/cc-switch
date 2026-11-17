@@ -1461,6 +1461,64 @@ describe("UnifiedSkillsPanel", () => {
       );
     });
 
+    it("selects every Skill in a folder from the folder row, and only those", async () => {
+      withFolders();
+      renderPanel();
+
+      // 第一个文件夹复选框是 Web（里面是 A、B），C 在「未分类」
+      const folderBoxes = screen.getAllByRole("checkbox", {
+        name: "skillFolders.selectAllAria",
+      });
+      await userEvent.click(folderBoxes[0]);
+
+      const rowBox = (id: string) =>
+        document
+          .getElementById(`sk-row-${id}`)
+          ?.querySelector<HTMLInputElement>('input[type="checkbox"]');
+      expect(rowBox("local:a")?.checked).toBe(true);
+      expect(rowBox("local:b")?.checked).toBe(true);
+      expect(rowBox("local:c")?.checked).toBe(false);
+      expect(screen.getByText("skillsPage.bulk.selected")).toBeInTheDocument();
+
+      // 取消其中一个 → 文件夹变半选；再点文件夹复选框是补齐，不是清空
+      await userEvent.click(rowBox("local:a") as HTMLInputElement);
+      expect((folderBoxes[0] as HTMLInputElement).indeterminate).toBe(true);
+      await userEvent.click(folderBoxes[0]);
+      expect(rowBox("local:a")?.checked).toBe(true);
+
+      // 全选状态下再点一次 → 只清掉这个文件夹的
+      await userEvent.click(folderBoxes[0]);
+      expect(rowBox("local:a")?.checked).toBe(false);
+      expect(rowBox("local:b")?.checked).toBe(false);
+    });
+
+    it("selects a collapsed folder's Skills too, so they can be moved without expanding", async () => {
+      withFolders();
+      renderPanel();
+
+      await userEvent.click(
+        screen.getAllByRole("button", { name: "skillFolders.collapseAria" })[0],
+      );
+      expect(document.getElementById("sk-row-local:a")).toBeNull();
+
+      await userEvent.click(
+        screen.getAllByRole("checkbox", {
+          name: "skillFolders.selectAllAria",
+        })[0],
+      );
+      await userEvent.click(
+        screen.getByRole("button", { name: "skillFolders.moveTo" }),
+      );
+      await userEvent.click(
+        await screen.findByRole("menuitem", { name: "skillFolders.moveOut" }),
+      );
+
+      await waitFor(() => expect(m.moveToFolder).toHaveBeenCalledTimes(1));
+      const call = m.moveToFolder.mock.calls[0][0];
+      expect(call.folderId).toBeNull();
+      expect([...call.skillIds].sort()).toEqual(["local:a", "local:b"]);
+    });
+
     it("renders no folder rows at all when no folder exists", () => {
       m.installed = [makeSkill()];
       renderPanel();

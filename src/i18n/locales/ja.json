@@ -5505,6 +5505,7 @@
     "expandAria": "フォルダ {{name}} を展開",
     "collapseAria": "フォルダ {{name}} を折りたたむ",
     "moreAria": "フォルダ {{name}} のその他の操作",
+    "selectAllAria": "フォルダ {{name}} 内の Skill をすべて選択",
     "cell": {
       "all": "{{name}} · {{app}}：すべて有効。クリックですべて無効にします",
       "some": "{{name}} · {{app}}：一部が有効。クリックで残りも有効にします",

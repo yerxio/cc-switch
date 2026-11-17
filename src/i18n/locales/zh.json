@@ -5505,6 +5505,7 @@
     "expandAria": "展开文件夹 {{name}}",
     "collapseAria": "折叠文件夹 {{name}}",
     "moreAria": "文件夹 {{name}} 的更多操作",
+    "selectAllAria": "选中文件夹 {{name}} 里的全部 Skill",
     "cell": {
       "all": "{{name}} · {{app}}：全部已启用，点一下全部停用",
       "some": "{{name}} · {{app}}：部分已启用，点一下把剩下的都启用",

@@ -1604,6 +1604,20 @@ const UnifiedSkillsPanel: React.FC<UnifiedSkillsPanelProps> = ({
                         first={index === 0}
                         appIds={appIds}
                         disabled={controlsDisabled}
+                        selectedCount={
+                          row.skills.filter((skill) => selected.has(skill.id))
+                            .length
+                        }
+                        onPickAll={(select) =>
+                          setSelected((prev) => {
+                            const next = new Set(prev);
+                            for (const skill of row.skills) {
+                              if (select) next.add(skill.id);
+                              else next.delete(skill.id);
+                            }
+                            return next;
+                          })
+                        }
                         onToggleCollapsed={() => toggleFolder(row.key)}
                         onCell={(app, enable) =>
                           handleFolderToggle(row.skills, app, enable)

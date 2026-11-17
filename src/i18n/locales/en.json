@@ -5505,6 +5505,7 @@
     "expandAria": "Expand folder {{name}}",
     "collapseAria": "Collapse folder {{name}}",
     "moreAria": "More actions for folder {{name}}",
+    "selectAllAria": "Select all Skills in folder {{name}}",
     "cell": {
       "all": "{{name}} · {{app}}: all enabled — click to disable all",
       "some": "{{name}} · {{app}}: some enabled — click to enable the rest",

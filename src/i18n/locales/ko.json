@@ -5505,6 +5505,7 @@
     "expandAria": "폴더 {{name}} 펼치기",
     "collapseAria": "폴더 {{name}} 접기",
     "moreAria": "폴더 {{name}}의 추가 작업",
+    "selectAllAria": "폴더 {{name}}의 스킬 모두 선택",
     "cell": {
       "all": "{{name}} · {{app}}: 모두 활성화됨. 클릭하면 모두 비활성화합니다",
       "some": "{{name}} · {{app}}: 일부 활성화됨. 클릭하면 나머지도 활성화합니다",

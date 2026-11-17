@@ -11,6 +11,7 @@ import type { AppId } from "@/lib/api/types";
 import type { InstalledSkill } from "@/lib/api/skills";
 import type { SkillFolder } from "@/lib/api/skillFolders";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { DialogTitle } from "@/components/ui/dialog";
 import {
   DropdownMenu,
@@ -136,6 +137,8 @@ export function FolderHeaderRow({
   first,
   appIds,
   disabled,
+  selectedCount,
+  onPickAll,
   onToggleCollapsed,
   onCell,
   onRename,
@@ -148,6 +151,10 @@ export function FolderHeaderRow({
   first: boolean;
   appIds: AppId[];
   disabled: boolean;
+  /** 这个文件夹里已被勾选的 Skill 数，决定复选框是全选、半选还是没选 */
+  selectedCount: number;
+  /** 勾选 / 取消这个文件夹里的全部 Skill（折叠着也算） */
+  onPickAll: (select: boolean) => void;
   onToggleCollapsed: () => void;
   onCell: (app: AppId, enable: boolean) => void;
   /** 「未分类」不是真文件夹，不能改名 / 删除，不传这两个 */
@@ -157,6 +164,7 @@ export function FolderHeaderRow({
 }) {
   const { t } = useTranslation();
   const Chevron = collapsed ? ChevronRight : ChevronDown;
+  const allSelected = skills.length > 0 && selectedCount === skills.length;
   return (
     <li
       data-folder-row={name}
@@ -167,6 +175,17 @@ export function FolderHeaderRow({
       style={{ height: FOLDER_ROW_HEIGHT }}
     >
       <div className="sticky left-0 z-[1] flex min-w-0 flex-1 items-center self-stretch bg-subtle ps-2">
+        {/* 和条目行、表头的复选框在同一列：全选这个文件夹，半选时点一下补齐 */}
+        <span className="flex w-6 shrink-0 justify-center">
+          <Checkbox
+            aria-label={t("skillFolders.selectAllAria", { name })}
+            disabled={skills.length === 0}
+            checked={
+              allSelected ? true : selectedCount > 0 ? "indeterminate" : false
+            }
+            onCheckedChange={() => onPickAll(!allSelected)}
+          />
+        </span>
         <button
           type="button"
           aria-expanded={!collapsed}
@@ -175,11 +194,9 @@ export function FolderHeaderRow({
             { name },
           )}
           onClick={onToggleCollapsed}
-          className="flex min-w-0 items-center gap-1.5 rounded-control py-1 pe-2 text-start outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="ms-1 flex min-w-0 items-center gap-1.5 rounded-control py-1 pe-2 ps-1 text-start outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
-          <span className="flex w-6 shrink-0 justify-center">
-            <Chevron className="h-4 w-4 text-fg-2" strokeWidth={2} />
-          </span>
+          <Chevron className="h-4 w-4 shrink-0 text-fg-2" strokeWidth={2} />
           <Folder className="h-4 w-4 shrink-0 text-fg-2" strokeWidth={1.75} />
           <span className="min-w-0 truncate text-body font-medium">{name}</span>
           <span className="shrink-0 text-caption tabular-nums text-fg-2">

@@ -5505,6 +5505,7 @@
     "expandAria": "{{name}} klasörünü genişlet",
     "collapseAria": "{{name}} klasörünü daralt",
     "moreAria": "{{name}} klasörü için diğer işlemler",
+    "selectAllAria": "{{name}} klasöründeki tüm Becerileri seç",
     "cell": {
       "all": "{{name}} · {{app}}: tümü etkin — tümünü devre dışı bırakmak için tıklayın",
       "some": "{{name}} · {{app}}: bazıları etkin — kalanını etkinleştirmek için tıklayın",
