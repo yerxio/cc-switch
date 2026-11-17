@@ -1733,6 +1733,51 @@ fn migration_from_v27_adds_the_skill_folder_tables() {
 }
 
 #[test]
+fn migration_from_v28_adds_the_mcp_folder_tables() {
+    let conn = Connection::open_in_memory().expect("open memory db");
+    Database::create_tables_on_conn(&conn).expect("create tables");
+    conn.execute_batch(
+        "DROP TABLE mcp_folder_items;
+         DROP TABLE mcp_folders;
+         INSERT INTO skill_folders (id, name) VALUES ('f1', 'Web');
+         INSERT INTO mcp_servers (id, name, server_config, enabled_claude)
+         VALUES ('fetch', 'fetch', '{}', 1);",
+    )
+    .expect("seed v28 database");
+    Database::set_user_version(&conn, 28).expect("set user_version=28");
+
+    Database::apply_schema_migrations_on_conn(&conn).expect("upgrade v28 database");
+
+    assert_eq!(Database::get_user_version(&conn).unwrap(), SCHEMA_VERSION);
+    for table in ["mcp_folders", "mcp_folder_items"] {
+        let count: i64 = conn
+            .query_row(
+                "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = ?1",
+                [table],
+                |row| row.get(0),
+            )
+            .expect("query sqlite_master");
+        assert_eq!(count, 1, "{table} 应由 v29 迁移建出来");
+    }
+    // Skill 的文件夹和 MCP 服务器本身都不该被这次迁移碰到
+    let skill_folder: String = conn
+        .query_row(
+            "SELECT name FROM skill_folders WHERE id = 'f1'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("read skill folder");
+    assert_eq!(skill_folder, "Web");
+    assert!(conn
+        .query_row(
+            "SELECT enabled_claude FROM mcp_servers WHERE id = 'fetch'",
+            [],
+            |row| row.get::<_, bool>(0)
+        )
+        .expect("read server flag"));
+}
+
+#[test]
 fn fresh_install_has_dsh_copilot_and_workbuddy_flags_at_current_version() {
     // 与 Database::init 的全新安装路径一致：先建表，再从 user_version=0 跑迁移。
     let conn = Connection::open_in_memory().expect("open memory db");

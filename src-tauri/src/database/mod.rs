@@ -33,13 +33,13 @@ mod tests;
 
 // DAO 类型导出供外部使用
 pub use dao::custom_icons::{CustomIconEntry, CUSTOM_ICONS_KEY};
+pub(crate) use dao::folders::{FolderKind, FolderRow};
 pub(crate) use dao::project_scope::ScopedProjectRow;
 pub(crate) use dao::providers_seed::{
     is_official_seed_id, CLAUDE_DESKTOP_OFFICIAL_PROVIDER_ID, CODEX_OFFICIAL_PROVIDER_ID,
     GROKBUILD_OFFICIAL_PROVIDER_ID,
 };
 pub(crate) use dao::proxy::{PRICING_SOURCE_REQUEST, PRICING_SOURCE_RESPONSE};
-pub(crate) use dao::skill_folders::SkillFolderRow;
 pub use dao::FailoverQueueItem;
 pub use dao::Profile;
 
@@ -53,7 +53,7 @@ use std::sync::{Mutex, MutexGuard};
 
 /// 当前 Schema 版本号
 /// 每次修改表结构时递增，并在 schema.rs 中添加相应的迁移逻辑
-pub(crate) const SCHEMA_VERSION: i32 = 28;
+pub(crate) const SCHEMA_VERSION: i32 = 29;
 
 /// 安全地序列化 JSON，避免 unwrap panic
 pub(crate) fn to_json_string<T: Serialize>(value: &T) -> Result<String, AppError> {

@@ -24,33 +24,16 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
-use crate::database::{Database, SkillFolderRow};
+use crate::database::{Database, FolderKind};
 use crate::error::AppError;
+use crate::services::folders::FolderService;
 use crate::services::skill::SkillService;
 
 /// ZIP 根目录里的清单文件名
 pub const MANIFEST_NAME: &str = "cc-switch-skills.json";
 const MANIFEST_VERSION: u32 = 1;
-/// 文件夹名长度上限（字符数）
-const MAX_FOLDER_NAME_CHARS: usize = 64;
-
-/// 一个文件夹（给前端的形态）
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SkillFolder {
-    pub id: String,
-    pub name: String,
-    pub sort_order: i64,
-}
-
-/// 面板一次拉取的文件夹状态
-#[derive(Debug, Clone, Default, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SkillFoldersState {
-    pub folders: Vec<SkillFolder>,
-    /// Skill id → 文件夹 id。不在这里面的 Skill 就是「未分类」。
-    pub assignments: BTreeMap<String, String>,
-}
+/// Skill 文件夹就是通用文件夹用在 Skills 上
+pub use crate::services::folders::{Folder as SkillFolder, FoldersState as SkillFoldersState};
 
 /// 一次导出的结果
 #[derive(Debug, Clone, Serialize)]
@@ -74,116 +57,29 @@ struct Manifest {
 pub struct SkillFolderService;
 
 impl SkillFolderService {
-    /// 文件夹与归属的完整状态。读之前顺手清掉指向已卸载 Skill 的归属行。
+    // 增删改移都是通用文件夹的事（见 [`FolderService`]），这里只是把种类定成 Skill，
+    // 让本模块的导出 / 导入和调用方不用每次带上 `FolderKind::Skill`。
+
     pub fn state(db: &Arc<Database>) -> Result<SkillFoldersState, AppError> {
-        db.prune_skill_folder_items()?;
-        let folders = db
-            .list_skill_folders()?
-            .into_iter()
-            .map(|row| SkillFolder {
-                id: row.id,
-                name: row.name,
-                sort_order: row.sort_order,
-            })
-            .collect();
-        let assignments = db.list_skill_folder_items()?.into_iter().collect();
-        Ok(SkillFoldersState {
-            folders,
-            assignments,
-        })
+        FolderService::state(db, FolderKind::Skill)
     }
 
-    /// 规范化并校验文件夹名
-    fn clean_name(raw: &str) -> Result<String, AppError> {
-        let name = raw.trim();
-        if name.is_empty() {
-            return Err(AppError::InvalidInput("文件夹名不能为空".into()));
-        }
-        if name.chars().count() > MAX_FOLDER_NAME_CHARS {
-            return Err(AppError::InvalidInput(format!(
-                "文件夹名不能超过 {MAX_FOLDER_NAME_CHARS} 个字符"
-            )));
-        }
-        if name.chars().any(char::is_control) {
-            return Err(AppError::InvalidInput("文件夹名里有不可见字符".into()));
-        }
-        Ok(name.to_string())
-    }
-
-    fn find_by_name(db: &Arc<Database>, name: &str) -> Result<Option<SkillFolderRow>, AppError> {
-        let wanted = name.to_lowercase();
-        Ok(db
-            .list_skill_folders()?
-            .into_iter()
-            .find(|row| row.name.to_lowercase() == wanted))
-    }
-
-    /// 新建文件夹；重名（不分大小写）报错
     pub fn create(db: &Arc<Database>, raw_name: &str) -> Result<SkillFolder, AppError> {
-        let name = Self::clean_name(raw_name)?;
-        if Self::find_by_name(db, &name)?.is_some() {
-            return Err(AppError::InvalidInput(format!(
-                "已经有名为 {name} 的文件夹"
-            )));
-        }
-        let row = Self::insert(db, name)?;
-        log::info!("Skill 文件夹：新建 {}", row.name);
-        Ok(SkillFolder {
-            id: row.id,
-            name: row.name,
-            sort_order: row.sort_order,
-        })
-    }
-
-    fn insert(db: &Arc<Database>, name: String) -> Result<SkillFolderRow, AppError> {
-        // 新文件夹排在最后
-        let next_order = db
-            .list_skill_folders()?
-            .iter()
-            .map(|row| row.sort_order)
-            .max()
-            .map_or(0, |max| max + 1);
-        let row = SkillFolderRow {
-            id: uuid::Uuid::new_v4().to_string(),
-            name,
-            sort_order: next_order,
-            created_at: chrono::Utc::now().timestamp(),
-        };
-        db.insert_skill_folder(&row)?;
-        Ok(row)
+        FolderService::create(db, FolderKind::Skill, raw_name)
     }
 
     /// 按名字取文件夹 id，没有就建。导入 ZIP 时用：同名文件夹直接并进去。
     pub fn ensure(db: &Arc<Database>, raw_name: &str) -> Result<String, AppError> {
-        let name = Self::clean_name(raw_name)?;
-        if let Some(existing) = Self::find_by_name(db, &name)? {
-            return Ok(existing.id);
-        }
-        Ok(Self::insert(db, name)?.id)
+        FolderService::ensure(db, FolderKind::Skill, raw_name)
     }
 
     pub fn rename(db: &Arc<Database>, id: &str, raw_name: &str) -> Result<(), AppError> {
-        let name = Self::clean_name(raw_name)?;
-        if let Some(other) = Self::find_by_name(db, &name)? {
-            if other.id != id {
-                return Err(AppError::InvalidInput(format!(
-                    "已经有名为 {name} 的文件夹"
-                )));
-            }
-        }
-        if !db.rename_skill_folder(id, &name)? {
-            return Err(AppError::InvalidInput(format!("文件夹不存在: {id}")));
-        }
-        Ok(())
+        FolderService::rename(db, FolderKind::Skill, id, raw_name)
     }
 
     /// 删除文件夹。里面的 Skill 不卸载，只是回到「未分类」。
     pub fn delete(db: &Arc<Database>, id: &str) -> Result<(), AppError> {
-        if !db.delete_skill_folder(id)? {
-            return Err(AppError::InvalidInput(format!("文件夹不存在: {id}")));
-        }
-        log::info!("Skill 文件夹：删除 {id}");
-        Ok(())
+        FolderService::delete(db, FolderKind::Skill, id)
     }
 
     /// 把一批 Skill 移进某个文件夹；`folder_id` 为 `None` 则移回「未分类」。
@@ -192,16 +88,7 @@ impl SkillFolderService {
         skill_ids: &[String],
         folder_id: Option<&str>,
     ) -> Result<usize, AppError> {
-        if let Some(folder_id) = folder_id {
-            if !db
-                .list_skill_folders()?
-                .iter()
-                .any(|row| row.id == folder_id)
-            {
-                return Err(AppError::InvalidInput(format!("文件夹不存在: {folder_id}")));
-            }
-        }
-        db.assign_skills_to_folder(skill_ids, folder_id)
+        FolderService::move_items(db, FolderKind::Skill, skill_ids, folder_id)
     }
 
     /// 把选中的 Skill 导出成一个 ZIP，保留文件夹层级。

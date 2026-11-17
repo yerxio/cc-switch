@@ -4,6 +4,7 @@
 
 pub mod custom_icons;
 pub mod failover;
+pub mod folders;
 pub mod mcp;
 pub mod profiles;
 pub mod project_scope;
@@ -12,7 +13,6 @@ pub mod providers;
 pub mod providers_seed;
 pub mod proxy;
 pub mod settings;
-pub mod skill_folders;
 pub mod skills;
 pub mod stream_check;
 pub mod universal_providers;

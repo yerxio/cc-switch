@@ -5000,7 +5000,13 @@ impl SkillService {
         let mut folders = Vec::new();
         for (folder, members) in folder_members {
             let assigned = crate::services::skill_folder::SkillFolderService::ensure(db, &folder)
-                .and_then(|folder_id| db.assign_skills_to_folder(&members, Some(&folder_id)));
+                .and_then(|folder_id| {
+                    db.assign_items_to_folder(
+                        crate::database::FolderKind::Skill,
+                        &members,
+                        Some(&folder_id),
+                    )
+                });
             match assigned {
                 Ok(_) => folders.push(folder),
                 Err(error) => {

@@ -1691,6 +1691,12 @@ pub fn run() {
             commands::upsert_mcp_server,
             commands::delete_mcp_server,
             commands::toggle_mcp_app,
+            // MCP 文件夹（纯收纳视图，和 Skill 文件夹同一套实现）
+            commands::get_mcp_folders,
+            commands::create_mcp_folder,
+            commands::rename_mcp_folder,
+            commands::delete_mcp_folder,
+            commands::move_mcp_servers_to_folder,
             commands::import_mcp_from_apps,
             commands::resync_mcp_to_apps,
             // Prompt management

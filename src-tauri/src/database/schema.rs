@@ -452,6 +452,27 @@ impl Database {
         )
         .map_err(|e| AppError::Database(e.to_string()))?;
 
+        // 22. MCP 文件夹：和 Skill 文件夹同一套结构，各有各的表、互不相干
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS mcp_folders (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+                sort_order INTEGER NOT NULL DEFAULT 0,
+                created_at INTEGER NOT NULL DEFAULT 0
+            )",
+            [],
+        )
+        .map_err(|e| AppError::Database(e.to_string()))?;
+
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS mcp_folder_items (
+                server_id TEXT PRIMARY KEY,
+                folder_id TEXT NOT NULL
+            )",
+            [],
+        )
+        .map_err(|e| AppError::Database(e.to_string()))?;
+
         // 修复跑过未发布开发版的库：current 标记曾是全局 key，现按应用分组
         // （随 v12 定稿为 current_profile_id_<scope>，不单独 bump 版本）
         if conn
@@ -788,6 +809,11 @@ impl Database {
                         Self::migrate_v27_to_v28(conn)?;
                         Self::set_user_version(conn, 28)?;
                     }
+                    28 => {
+                        log::info!("迁移数据库从 v28 到 v29（MCP 文件夹）");
+                        Self::migrate_v28_to_v29(conn)?;
+                        Self::set_user_version(conn, 29)?;
+                    }
                     _ => {
                         return Err(AppError::Database(format!(
                             "未知的数据库版本 {version}，无法迁移到 {SCHEMA_VERSION}"
@@ -862,6 +888,30 @@ impl Database {
         conn.execute(
             "CREATE TABLE IF NOT EXISTS skill_folder_items (
                 skill_id TEXT PRIMARY KEY,
+                folder_id TEXT NOT NULL
+            )",
+            [],
+        )
+        .map_err(|e| AppError::Database(e.to_string()))?;
+        Ok(())
+    }
+
+    /// v28 -> v29 迁移：MCP 文件夹的两张新表（只建表，不动 mcp_servers 的任何列）
+    fn migrate_v28_to_v29(conn: &Connection) -> Result<(), AppError> {
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS mcp_folders (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+                sort_order INTEGER NOT NULL DEFAULT 0,
+                created_at INTEGER NOT NULL DEFAULT 0
+            )",
+            [],
+        )
+        .map_err(|e| AppError::Database(e.to_string()))?;
+
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS mcp_folder_items (
+                server_id TEXT PRIMARY KEY,
                 folder_id TEXT NOT NULL
             )",
             [],
