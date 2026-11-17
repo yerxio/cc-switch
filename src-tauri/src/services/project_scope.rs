@@ -1443,6 +1443,76 @@ mod tests {
         );
     }
 
+    /// MCP 的强制覆盖只换同名那一条：文件是读-改-写的补丁，不是整文件覆盖。
+    /// 同一份 `.mcp.json` / `config.toml` 里别人的条目和别的设置都必须留着。
+    #[test]
+    #[serial_test::serial]
+    fn forcing_an_mcp_entry_replaces_only_that_entry() {
+        let fixture = setup();
+        seed_server(&fixture.db, "ctx7", McpApps::default());
+        let root = repo_root(&fixture);
+
+        // 仓库里本来就有：一条同名的、一条别的、以及一个无关顶层键
+        let mcp_file = claude_mcp_path(&root);
+        fs::write(
+            &mcp_file,
+            "{\"mcpServers\":{\"ctx7\":{\"command\":\"theirs\"},\
+             \"teammate\":{\"command\":\"node\"}},\"$schema\":\"https://x/s.json\"}",
+        )
+        .expect("seed .mcp.json");
+
+        // Codex 侧同理：同名表 + 另一张表 + 一个顶层键
+        let codex_file = codex_config_path(&root);
+        fs::create_dir_all(codex_file.parent().expect("parent")).expect("mkdir .codex");
+        fs::write(
+            &codex_file,
+            "model = \"gpt-5-codex\"\n\n[mcp_servers.ctx7]\ncommand = \"theirs\"\n\n\
+             [mcp_servers.teammate]\ncommand = \"node\"\n",
+        )
+        .expect("seed config.toml");
+
+        for app in ProjectApp::all() {
+            ProjectScopeService::toggle_mcp(
+                &fixture.db,
+                &fixture.project_id,
+                "ctx7",
+                app,
+                true,
+                true,
+            )
+            .expect("forced bind");
+        }
+
+        let written: Value =
+            serde_json::from_str(&fs::read_to_string(&mcp_file).expect("read json"))
+                .expect("parse json");
+        assert_eq!(
+            written["mcpServers"]["ctx7"]["command"],
+            json!("npx"),
+            "同名那一条换成受管的定义"
+        );
+        assert_eq!(
+            written["mcpServers"]["teammate"]["command"],
+            json!("node"),
+            "同文件里别的 MCP 条目必须留着"
+        );
+        assert_eq!(written["$schema"], json!("https://x/s.json"));
+
+        let toml_after = fs::read_to_string(&codex_file).expect("read toml");
+        assert!(
+            toml_after.contains("[mcp_servers.teammate]"),
+            "同文件里别的 MCP 表必须留着: {toml_after}"
+        );
+        assert!(
+            toml_after.contains("model = \"gpt-5-codex\""),
+            "无关设置必须留着: {toml_after}"
+        );
+        assert!(
+            !toml_after.contains("command = \"theirs\""),
+            "同名那一张表应已换掉: {toml_after}"
+        );
+    }
+
     /// Skill 的强制覆盖是整个目录替换，旧内容不留。
     #[test]
     #[serial_test::serial]

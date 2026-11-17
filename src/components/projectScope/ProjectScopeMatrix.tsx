@@ -336,15 +336,28 @@ export function ProjectScopeMatrix({
         {t("projectScope.legend")}
       </p>
 
+      {/*
+       * 两种冲突的影响面差得很远，文案必须分开：
+       * - MCP：只替换同名那一条，文件里其他服务器和设置都不动（写入走的是
+       *   读-改-写补丁，不是整文件覆盖）
+       * - Skill：整个目录替换，里面现有的文件会被删掉
+       */}
       <V7ConfirmDialog
         open={conflict !== null}
-        // 覆盖会顶掉仓库里现有的内容，Skill 还是整目录替换：红色确认键
+        // Skill 会删掉现有文件，MCP 会顶掉一条现有定义：都用红色确认键
         danger
-        title={t("projectScope.conflictTitle", { key: conflict?.key ?? "" })}
-        body={t("projectScope.conflictBody", { path: conflict?.path ?? "" })}
-        details={
-          kind === "skill" ? t("projectScope.conflictSkillDetails") : undefined
-        }
+        title={t(
+          kind === "mcp"
+            ? "projectScope.conflictTitleMcp"
+            : "projectScope.conflictTitleSkill",
+          { key: conflict?.key ?? "", path: conflict?.path ?? "" },
+        )}
+        body={t(
+          kind === "mcp"
+            ? "projectScope.conflictBodyMcp"
+            : "projectScope.conflictBodySkill",
+          { key: conflict?.key ?? "", path: conflict?.path ?? "" },
+        )}
         confirmLabel={t("projectScope.conflictConfirm")}
         pending={busy}
         onConfirm={() => void handleForce()}

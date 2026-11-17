@@ -1232,7 +1232,7 @@ describe("UnifiedSkillsPanel", () => {
 
     // 先弹确认，且此时还没有强制写入
     expect(
-      await screen.findByText("projectScope.conflictTitle"),
+      await screen.findByText("projectScope.conflictTitleSkill"),
     ).toBeInTheDocument();
     expect(m.toggleProjectSkill).toHaveBeenCalledTimes(1);
     expect(m.toggleProjectSkill).toHaveBeenLastCalledWith(
