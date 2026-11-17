@@ -58,21 +58,21 @@ import type { SkillUninstallResult } from "@/lib/api/skills";
 import { skillFoldersApi, type SkillFolder } from "@/lib/api/skillFolders";
 import {
   useCollapsedFolders,
-  useCreateSkillFolder,
-  useDeleteSkillFolder,
+  useCreateFolder,
+  useDeleteFolder,
   useExportSkillsZip,
-  useMoveSkillsToFolder,
-  useRenameSkillFolder,
-  useSkillFolders,
-} from "@/hooks/useSkillFolders";
+  useFolders,
+  useMoveToFolder,
+  useRenameFolder,
+} from "@/hooks/useFolders";
 import {
-  buildSkillDisplayRows,
+  buildFolderDisplayRows,
   FOLDER_ROW_HEIGHT,
   FolderHeaderRow,
   FolderNameDialog,
   MoveToFolderMenu,
   UNFILED_KEY,
-} from "./skillFolders";
+} from "@/components/common/folders";
 import { copyText } from "@/lib/clipboard";
 import { extractErrorMessage } from "@/utils/errorUtils";
 import { cn } from "@/lib/utils";
@@ -225,18 +225,18 @@ const UnifiedSkillsPanel: React.FC<UnifiedSkillsPanelProps> = ({
   const uninstallManyMutation = useUninstallSkills();
 
   // 文件夹：纯收纳视图，不改变任何文件的落点
-  const { data: folderState } = useSkillFolders();
+  const { data: folderState } = useFolders("skills");
   const folders = folderState?.folders ?? EMPTY_FOLDERS;
   const folderAssignments = folderState?.assignments ?? EMPTY_ASSIGNMENTS;
   const {
     collapsed: collapsedFolders,
     toggle: toggleFolder,
     expand: expandFolder,
-  } = useCollapsedFolders();
-  const createFolderMutation = useCreateSkillFolder();
-  const renameFolderMutation = useRenameSkillFolder();
-  const deleteFolderMutation = useDeleteSkillFolder();
-  const moveToFolderMutation = useMoveSkillsToFolder();
+  } = useCollapsedFolders("skills");
+  const createFolderMutation = useCreateFolder("skills");
+  const renameFolderMutation = useRenameFolder("skills");
+  const deleteFolderMutation = useDeleteFolder("skills");
+  const moveToFolderMutation = useMoveToFolder("skills");
   const exportZipMutation = useExportSkillsZip();
   /** 取名框：新建（可带上要一并移进去的 Skill）或重命名 */
   const [folderDialog, setFolderDialog] = useState<
@@ -453,7 +453,7 @@ const UnifiedSkillsPanel: React.FC<UnifiedSkillsPanelProps> = ({
   // 文件夹行和条目行混排；一个文件夹都没有时就是原来的扁平列表
   const displayRows = useMemo(
     () =>
-      buildSkillDisplayRows(
+      buildFolderDisplayRows(
         filteredSkills,
         folders,
         folderAssignments,
@@ -489,7 +489,7 @@ const UnifiedSkillsPanel: React.FC<UnifiedSkillsPanelProps> = ({
   useEffect(() => {
     if (!highlightId || view !== "installed") return;
     const index = displayRows.findIndex(
-      (row) => row.kind === "skill" && row.key === highlightId,
+      (row) => row.kind === "item" && row.key === highlightId,
     );
     if (index < 0) {
       // 那一行可能收在折叠的文件夹里：展开它，displayRows 变了这个 effect 会再跑
@@ -654,7 +654,7 @@ const UnifiedSkillsPanel: React.FC<UnifiedSkillsPanelProps> = ({
   const handleMoveToFolder = async (ids: string[], folderId: string | null) => {
     if (ids.length === 0) return;
     try {
-      await moveToFolderMutation.mutateAsync({ skillIds: ids, folderId });
+      await moveToFolderMutation.mutateAsync({ itemIds: ids, folderId });
       const folder = folders.find((item) => item.id === folderId);
       toast.success(
         folder
@@ -681,7 +681,7 @@ const UnifiedSkillsPanel: React.FC<UnifiedSkillsPanelProps> = ({
         // 从「移动到… → 新建文件夹」进来的，建完直接把选中的移进去
         if (folderDialog.moveIds.length > 0) {
           await moveToFolderMutation.mutateAsync({
-            skillIds: folderDialog.moveIds,
+            itemIds: folderDialog.moveIds,
             folderId: created.id,
           });
           setSelected(new Set());
@@ -1599,19 +1599,20 @@ const UnifiedSkillsPanel: React.FC<UnifiedSkillsPanelProps> = ({
                       <FolderHeaderRow
                         key={`folder:${row.key}`}
                         name={name}
-                        skills={row.skills}
+                        ns="skillFolders"
+                        items={row.items}
                         collapsed={row.collapsed}
                         first={index === 0}
                         appIds={appIds}
                         disabled={controlsDisabled}
                         selectedCount={
-                          row.skills.filter((skill) => selected.has(skill.id))
+                          row.items.filter((skill) => selected.has(skill.id))
                             .length
                         }
                         onPickAll={(select) =>
                           setSelected((prev) => {
                             const next = new Set(prev);
-                            for (const skill of row.skills) {
+                            for (const skill of row.items) {
                               if (select) next.add(skill.id);
                               else next.delete(skill.id);
                             }
@@ -1620,11 +1621,11 @@ const UnifiedSkillsPanel: React.FC<UnifiedSkillsPanelProps> = ({
                         }
                         onToggleCollapsed={() => toggleFolder(row.key)}
                         onCell={(app, enable) =>
-                          handleFolderToggle(row.skills, app, enable)
+                          handleFolderToggle(row.items, app, enable)
                         }
                         onExport={() =>
                           void handleExport(
-                            row.skills.map((skill) => skill.id),
+                            row.items.map((skill) => skill.id),
                             name,
                           )
                         }
@@ -1639,7 +1640,7 @@ const UnifiedSkillsPanel: React.FC<UnifiedSkillsPanelProps> = ({
                       />
                     );
                   }
-                  const { skill } = row;
+                  const skill = row.item;
                   return (
                     <InstalledRow
                       key={skill.id}
@@ -1895,6 +1896,7 @@ const UnifiedSkillsPanel: React.FC<UnifiedSkillsPanelProps> = ({
                         {t("skills.update")}
                       </Button>
                       <MoveToFolderMenu
+                        ns="skillFolders"
                         folders={folders}
                         disabled={controlsDisabled}
                         onPick={(folderId) =>
@@ -2066,6 +2068,7 @@ const UnifiedSkillsPanel: React.FC<UnifiedSkillsPanelProps> = ({
       </div>
 
       <FolderNameDialog
+        ns="skillFolders"
         open={folderDialog !== null}
         title={t(
           folderDialog?.mode === "rename"

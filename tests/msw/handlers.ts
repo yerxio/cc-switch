@@ -55,6 +55,13 @@ export const handlers = [
   http.post(`${TAURI_ENDPOINT}/list_profiles`, () => success([])),
   // 项目级作用域：默认没有受管项目，面板就停在全局作用域
   http.post(`${TAURI_ENDPOINT}/list_scoped_projects`, () => success([])),
+  // 文件夹：默认一个都没有，列表就是扁平的
+  http.post(`${TAURI_ENDPOINT}/get_mcp_folders`, () =>
+    success({ folders: [], assignments: {} }),
+  ),
+  http.post(`${TAURI_ENDPOINT}/get_skill_folders`, () =>
+    success({ folders: [], assignments: {} }),
+  ),
   http.post(`${TAURI_ENDPOINT}/get_providers`, async ({ request }) => {
     const { app } = await withJson<{ app: AppId }>(request);
     return success(getProviders(app));

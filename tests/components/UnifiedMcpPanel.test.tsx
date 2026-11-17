@@ -24,6 +24,12 @@ const mocks = vi.hoisted(() => ({
   toastError: vi.fn(),
   toastSuccess: vi.fn(),
   toastWarning: vi.fn(),
+  // 文件夹
+  folderState: { folders: [], assignments: {} } as {
+    folders: Array<{ id: string; name: string; sortOrder: number }>;
+    assignments: Record<string, string>;
+  },
+  moveToFolder: vi.fn(),
   visibleApps: ["claude", "codex", "gemini"] as string[],
   connectivity: {
     states: { alpha: "connected", beta: "disconnected" } as Record<
@@ -73,6 +79,26 @@ vi.mock("@/components/mcp/useVisibleAppIds", () => ({
 vi.mock("@/hooks/useMcpConnectivity", () => ({
   useMcpConnectivity: () => mocks.connectivity,
 }));
+
+vi.mock("@/hooks/useFolders", async () => {
+  // 折叠状态是纯前端的 React 状态，用真的；其余都是打后端的，换成 mock
+  const actual =
+    await vi.importActual<typeof import("@/hooks/useFolders")>(
+      "@/hooks/useFolders",
+    );
+  const idle = { mutateAsync: vi.fn(), isPending: false };
+  return {
+    ...actual,
+    useFolders: () => ({ data: mocks.folderState }),
+    useCreateFolder: () => idle,
+    useRenameFolder: () => idle,
+    useDeleteFolder: () => idle,
+    useMoveToFolder: () => ({
+      mutateAsync: mocks.moveToFolder,
+      isPending: false,
+    }),
+  };
+});
 
 vi.mock("@/components/mcp/McpFormModal", () => ({
   default: ({ editingId }: { editingId?: string }) => (
@@ -168,6 +194,9 @@ describe("UnifiedMcpPanel", () => {
       })),
     );
     mocks.toastWarning.mockReset();
+    mocks.folderState = { folders: [], assignments: {} };
+    mocks.moveToFolder.mockReset().mockResolvedValue(1);
+    window.localStorage.clear();
     mocks.refetch.mockReset().mockResolvedValue({ data: mocks.serversMap });
     mocks.toastError.mockReset();
     mocks.toastSuccess.mockReset();
@@ -730,5 +759,114 @@ describe("UnifiedMcpPanel", () => {
     expect(onBlocked).toHaveBeenLastCalledWith(false);
     await userEvent.click(screen.getByRole("button", { name: "mcpPage.add" }));
     expect(onBlocked).toHaveBeenLastCalledWith(false);
+  });
+
+  describe("folders", () => {
+    const withFolders = () => {
+      mocks.serversMap = {
+        alpha: makeServer("alpha"),
+        beta: makeServer("beta", { apps: { claude: true } }),
+        gamma: makeServer("gamma"),
+      };
+      mocks.folderState = {
+        folders: [{ id: "f-db", name: "Databases", sortOrder: 0 }],
+        assignments: { alpha: "f-db", beta: "f-db" },
+      };
+    };
+
+    const layout = () =>
+      Array.from(
+        screen
+          .getByRole("list", { name: "mcpPage.listLabel" })
+          .querySelectorAll("li"),
+      ).map(
+        (row) =>
+          row.getAttribute("data-folder-row") ??
+          row.querySelector("span[title].truncate")?.textContent,
+      );
+
+    it("stays a flat list when no folder exists", () => {
+      mocks.serversMap = { alpha: makeServer("alpha") };
+      renderPanel();
+      expect(document.querySelector("[data-folder-row]")).toBeNull();
+      expect(layout()).toEqual(["alpha"]);
+    });
+
+    it("groups servers under their folder with the rest under Unfiled", () => {
+      withFolders();
+      renderPanel();
+      expect(layout()).toEqual([
+        "Databases",
+        "alpha",
+        "beta",
+        "mcpFolders.unfiled",
+        "gamma",
+      ]);
+    });
+
+    it("enables the rest of a folder for an app from the folder row", async () => {
+      withFolders();
+      renderPanel();
+
+      // beta 已经给 Claude 开了，alpha 没开：点一下只补 alpha，不带上文件夹外的 gamma
+      await userEvent.click(
+        screen.getAllByRole("button", { name: /mcpFolders.cell.some/ })[0],
+      );
+      await waitFor(() => expect(mocks.bulkToggle).toHaveBeenCalledTimes(1));
+      const call = mocks.bulkToggle.mock.calls[0][0];
+      expect(call).toMatchObject({ app: "claude", enabled: true });
+      expect(call.serverIds).toEqual(["alpha"]);
+    });
+
+    it("ticks a row without opening its editor, and moves the selection", async () => {
+      withFolders();
+      renderPanel();
+
+      // 整行点一下是进编辑；勾复选框不能触发它
+      await userEvent.click(
+        screen.getAllByRole("checkbox", { name: "mcpFolders.selectAria" })[2],
+      );
+      expect(screen.queryByTestId("mcp-drawer")).toBeNull();
+      expect(screen.getByText("mcpFolders.selected")).toBeInTheDocument();
+
+      await userEvent.click(
+        screen.getByRole("button", { name: "mcpFolders.moveTo" }),
+      );
+      await userEvent.click(
+        await screen.findByRole("menuitem", { name: "Databases" }),
+      );
+      await waitFor(() =>
+        expect(mocks.moveToFolder).toHaveBeenCalledWith({
+          itemIds: ["gamma"],
+          folderId: "f-db",
+        }),
+      );
+    });
+
+    it("selects a whole folder from its row, collapsed or not", async () => {
+      withFolders();
+      renderPanel();
+
+      await userEvent.click(
+        screen.getAllByRole("button", { name: "mcpFolders.collapseAria" })[0],
+      );
+      expect(layout()).toEqual(["Databases", "mcpFolders.unfiled", "gamma"]);
+
+      await userEvent.click(
+        screen.getAllByRole("checkbox", {
+          name: "mcpFolders.selectAllAria",
+        })[0],
+      );
+      await userEvent.click(
+        screen.getByRole("button", { name: "mcpFolders.moveTo" }),
+      );
+      await userEvent.click(
+        await screen.findByRole("menuitem", { name: "mcpFolders.moveOut" }),
+      );
+      await waitFor(() => expect(mocks.moveToFolder).toHaveBeenCalledTimes(1));
+      const call = mocks.moveToFolder.mock.calls[0][0];
+      expect(call.folderId).toBeNull();
+      expect([...call.itemIds].sort()).toEqual(["alpha", "beta"]);
+    });
   });
 });

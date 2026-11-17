@@ -5533,5 +5533,45 @@
       "exportFailed": "匯出失敗",
       "failed": "資料夾操作沒有成功"
     }
+  },
+  "mcpFolders": {
+    "unfiled": "未分類",
+    "newFolderEllipsis": "新增資料夾…",
+    "newFolderTitle": "新增資料夾",
+    "renameTitle": "重新命名資料夾",
+    "nameLabel": "資料夾名稱",
+    "namePlaceholder": "例如：資料庫",
+    "create": "建立",
+    "rename": "重新命名",
+    "delete": "刪除資料夾",
+    "deleteTitle": "刪除資料夾 {{name}}？",
+    "deleteBody": "只是解散這個分組，裡面的 MCP 伺服器不會被刪除，會回到「未分類」。",
+    "moveTo": "移動到",
+    "moveOut": "移出資料夾（未分類）",
+    "expandAria": "展開資料夾 {{name}}",
+    "collapseAria": "摺疊資料夾 {{name}}",
+    "moreAria": "資料夾 {{name}} 的更多操作",
+    "selectAllAria": "選取資料夾 {{name}} 裡的全部伺服器",
+    "cell": {
+      "all": "{{name}} · {{app}}：全部已啟用，點一下全部停用",
+      "some": "{{name}} · {{app}}：部分已啟用，點一下把剩下的都啟用",
+      "none": "{{name}} · {{app}}：都沒啟用，點一下全部啟用"
+    },
+    "toast": {
+      "created": "已建立資料夾 {{name}}",
+      "deleted": "已刪除資料夾 {{name}}",
+      "moved": "已把 {{count}} 個 MCP 伺服器移到 {{name}}",
+      "movedOut": "已把 {{count}} 個 MCP 伺服器移出資料夾",
+      "failed": "資料夾操作沒有成功"
+    },
+    "selectAllListAria": "全選目前清單",
+    "selectAria": "選擇 {{name}}",
+    "selected": "已選 {{count}}",
+    "bulk": {
+      "enabled": "已為 {{app}} 寫入 {{count}} 個 MCP 伺服器到這個專案",
+      "disabled": "已從這個專案撤掉 {{app}} 的 {{count}} 個 MCP 伺服器",
+      "conflicts": "{{count}} 個因設定檔裡已有同名項目被跳過，要取代請逐個點它的格子確認。",
+      "failed": "{{count}} 個失敗：{{error}}"
+    }
   }
 }

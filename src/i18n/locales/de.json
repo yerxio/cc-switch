@@ -5533,5 +5533,45 @@
       "exportFailed": "Export fehlgeschlagen",
       "failed": "Die Ordneraktion konnte nicht ausgeführt werden"
     }
+  },
+  "mcpFolders": {
+    "unfiled": "Ohne Ordner",
+    "newFolderEllipsis": "Neuer Ordner…",
+    "newFolderTitle": "Neuer Ordner",
+    "renameTitle": "Ordner umbenennen",
+    "nameLabel": "Ordnername",
+    "namePlaceholder": "z. B. Datenbanken",
+    "create": "Erstellen",
+    "rename": "Umbenennen",
+    "delete": "Ordner löschen",
+    "deleteTitle": "Ordner {{name}} löschen?",
+    "deleteBody": "Dies löst nur die Gruppe auf. Die MCP-Server darin werden nicht gelöscht und landen wieder unter „Ohne Ordner“.",
+    "moveTo": "Verschieben nach",
+    "moveOut": "Aus Ordner entfernen (ohne Ordner)",
+    "expandAria": "Ordner {{name}} aufklappen",
+    "collapseAria": "Ordner {{name}} zuklappen",
+    "moreAria": "Weitere Aktionen für Ordner {{name}}",
+    "selectAllAria": "Alle Server im Ordner {{name}} auswählen",
+    "cell": {
+      "all": "{{name}} · {{app}}: alle aktiviert — klicken, um alle zu deaktivieren",
+      "some": "{{name}} · {{app}}: einige aktiviert — klicken, um die übrigen zu aktivieren",
+      "none": "{{name}} · {{app}}: keiner aktiviert — klicken, um alle zu aktivieren"
+    },
+    "toast": {
+      "created": "Ordner {{name}} erstellt",
+      "deleted": "Ordner {{name}} gelöscht",
+      "moved": "{{count}} MCP-Server nach {{name}} verschoben",
+      "movedOut": "{{count}} MCP-Server aus ihrem Ordner entfernt",
+      "failed": "Die Ordneraktion konnte nicht ausgeführt werden"
+    },
+    "selectAllListAria": "Alles in der aktuellen Liste auswählen",
+    "selectAria": "{{name}} auswählen",
+    "selected": "{{count}} ausgewählt",
+    "bulk": {
+      "enabled": "{{count}} MCP-Server für {{app}} in dieses Projekt geschrieben",
+      "disabled": "{{count}} MCP-Server von {{app}} aus diesem Projekt entfernt",
+      "conflicts": "{{count}} übersprungen, weil die Konfigurationsdatei bereits einen Eintrag dieses Namens enthält; zum Ersetzen die Zelle jedes Servers anklicken und bestätigen.",
+      "failed": "{{count}} fehlgeschlagen: {{error}}"
+    }
   }
 }

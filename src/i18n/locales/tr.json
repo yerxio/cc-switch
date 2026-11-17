@@ -5533,5 +5533,45 @@
       "exportFailed": "Dışa aktarma başarısız",
       "failed": "Klasör işlemi tamamlanamadı"
     }
+  },
+  "mcpFolders": {
+    "unfiled": "Sınıflandırılmamış",
+    "newFolderEllipsis": "Yeni klasör…",
+    "newFolderTitle": "Yeni klasör",
+    "renameTitle": "Klasörü yeniden adlandır",
+    "nameLabel": "Klasör adı",
+    "namePlaceholder": "örn. Veritabanları",
+    "create": "Oluştur",
+    "rename": "Yeniden adlandır",
+    "delete": "Klasörü sil",
+    "deleteTitle": "{{name}} klasörü silinsin mi?",
+    "deleteBody": "Bu yalnızca grubu dağıtır. İçindeki MCP sunucuları silinmez ve Sınıflandırılmamış'a döner.",
+    "moveTo": "Taşı",
+    "moveOut": "Klasörden çıkar (Sınıflandırılmamış)",
+    "expandAria": "{{name}} klasörünü genişlet",
+    "collapseAria": "{{name}} klasörünü daralt",
+    "moreAria": "{{name}} klasörü için diğer işlemler",
+    "selectAllAria": "{{name}} klasöründeki tüm sunucuları seç",
+    "cell": {
+      "all": "{{name}} · {{app}}: tümü etkin — tümünü devre dışı bırakmak için tıklayın",
+      "some": "{{name}} · {{app}}: bazıları etkin — kalanını etkinleştirmek için tıklayın",
+      "none": "{{name}} · {{app}}: hiçbiri etkin değil — tümünü etkinleştirmek için tıklayın"
+    },
+    "toast": {
+      "created": "{{name}} klasörü oluşturuldu",
+      "deleted": "{{name}} klasörü silindi",
+      "moved": "{{count}} MCP sunucusu {{name}} klasörüne taşındı",
+      "movedOut": "{{count}} MCP sunucusu klasöründen çıkarıldı",
+      "failed": "Klasör işlemi tamamlanamadı"
+    },
+    "selectAllListAria": "Geçerli listedekilerin tümünü seç",
+    "selectAria": "{{name}} öğesini seç",
+    "selected": "{{count}} seçildi",
+    "bulk": {
+      "enabled": "{{app}} için {{count}} MCP sunucusu bu projeye yazıldı",
+      "disabled": "{{app}} uygulamasının {{count}} MCP sunucusu bu projeden kaldırıldı",
+      "conflicts": "{{count}} tanesi yapılandırma dosyasında aynı adlı kayıt olduğu için atlandı; değiştirmek için her birinin hücresine tıklayıp onaylayın.",
+      "failed": "{{count}} başarısız: {{error}}"
+    }
   }
 }

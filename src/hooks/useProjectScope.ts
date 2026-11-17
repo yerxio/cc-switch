@@ -101,48 +101,48 @@ export function useToggleProjectSkill() {
 }
 
 /** 一次文件夹级开关的结果 */
-export interface BulkProjectSkillResult {
+export interface BulkProjectResult {
   applied: string[];
-  /** 仓库里已有同名目录、没写入的（要覆盖得逐个点开确认） */
+  /** 仓库里已有同名的、没写入的（要覆盖得逐个点开确认） */
   conflicts: string[];
   failed: { id: string; error: string }[];
 }
 
 /**
- * 给一批 Skill 在某个项目某个应用下统一绑定 / 解绑（文件夹行上的格子用）。
+ * 给一批条目在某个项目某个应用下统一绑定 / 解绑（文件夹行上的格子用）。
  *
  * 逐条调用，但中途不碰缓存，全部跑完才刷新一次——单条的那个 mutation 每次都
  * 重读整个项目状态，放进循环里就是每条重画一遍整张表。
- * 同名冲突的不强制覆盖：整目录替换是破坏性的，不该夹在批量操作里悄悄做。
+ * 同名冲突的不强制覆盖：覆盖是破坏性的，不该夹在批量操作里悄悄做。
  */
-export function useBulkToggleProjectSkills() {
+export function useBulkToggleProjectItems() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({
+      kind,
       projectId,
-      skillIds,
+      itemIds,
       app,
       enabled,
     }: {
+      kind: "mcp" | "skill";
       projectId: string;
-      skillIds: string[];
+      itemIds: string[];
       app: ProjectScopeApp;
       enabled: boolean;
-    }): Promise<BulkProjectSkillResult> => {
-      const result: BulkProjectSkillResult = {
+    }): Promise<BulkProjectResult> => {
+      const toggle =
+        kind === "mcp"
+          ? projectScopeApi.toggleMcp
+          : projectScopeApi.toggleSkill;
+      const result: BulkProjectResult = {
         applied: [],
         conflicts: [],
         failed: [],
       };
-      for (const id of skillIds) {
+      for (const id of itemIds) {
         try {
-          const outcome = await projectScopeApi.toggleSkill(
-            projectId,
-            id,
-            app,
-            enabled,
-            false,
-          );
+          const outcome = await toggle(projectId, id, app, enabled, false);
           if (outcome.status === "conflict") result.conflicts.push(id);
           else result.applied.push(id);
         } catch (error) {

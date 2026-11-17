@@ -162,22 +162,27 @@ vi.mock("@/hooks/useSkills", () => ({
   useInstallSkill: () => ({ mutateAsync: vi.fn() }),
 }));
 
-vi.mock("@/hooks/useSkillFolders", async () => {
+vi.mock("@/hooks/useFolders", async () => {
   // 折叠状态是纯前端的 React 状态，用真的；其余都是打后端的，换成 mock
-  const actual = await vi.importActual<
-    typeof import("@/hooks/useSkillFolders")
-  >("@/hooks/useSkillFolders");
+  const actual =
+    await vi.importActual<typeof import("@/hooks/useFolders")>(
+      "@/hooks/useFolders",
+    );
   const idle = { mutateAsync: vi.fn(), isPending: false };
   return {
     ...actual,
-    useSkillFolders: () => ({ data: m.folderState }),
-    useCreateSkillFolder: () => ({
+    // MCP 的文件夹在这个面板的测试里用不到，给空的
+    useFolders: (scope: string) => ({
+      data:
+        scope === "skills" ? m.folderState : { folders: [], assignments: {} },
+    }),
+    useCreateFolder: () => ({
       mutateAsync: m.createFolder,
       isPending: false,
     }),
-    useRenameSkillFolder: () => idle,
-    useDeleteSkillFolder: () => idle,
-    useMoveSkillsToFolder: () => ({
+    useRenameFolder: () => idle,
+    useDeleteFolder: () => idle,
+    useMoveToFolder: () => ({
       mutateAsync: m.moveToFolder,
       isPending: false,
     }),
@@ -207,7 +212,7 @@ vi.mock("@/hooks/useProjectScope", () => ({
     mutateAsync: m.resyncProject,
     isPending: false,
   }),
-  useBulkToggleProjectSkills: () => ({
+  useBulkToggleProjectItems: () => ({
     mutateAsync: m.bulkProjectSkills,
     isPending: false,
   }),
@@ -1464,7 +1469,7 @@ describe("UnifiedSkillsPanel", () => {
       await waitFor(() => expect(m.moveToFolder).toHaveBeenCalledTimes(1));
       const call = m.moveToFolder.mock.calls[0][0];
       expect(call.folderId).toBe("f-web");
-      expect(call.skillIds).toEqual(
+      expect(call.itemIds).toEqual(
         expect.arrayContaining(["local:a", "local:b", "local:c"]),
       );
     });
@@ -1524,7 +1529,7 @@ describe("UnifiedSkillsPanel", () => {
       await waitFor(() => expect(m.moveToFolder).toHaveBeenCalledTimes(1));
       const call = m.moveToFolder.mock.calls[0][0];
       expect(call.folderId).toBeNull();
-      expect([...call.skillIds].sort()).toEqual(["local:a", "local:b"]);
+      expect([...call.itemIds].sort()).toEqual(["local:a", "local:b"]);
     });
 
     it("renders no folder rows at all when no folder exists", () => {
@@ -1644,8 +1649,9 @@ describe("UnifiedSkillsPanel", () => {
       );
       await waitFor(() =>
         expect(m.bulkProjectSkills).toHaveBeenCalledWith({
+          kind: "skill",
           projectId: "p1",
-          skillIds: ["local:a"],
+          itemIds: ["local:a"],
           app: "claude",
           enabled: true,
         }),

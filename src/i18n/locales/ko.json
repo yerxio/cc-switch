@@ -5533,5 +5533,45 @@
       "exportFailed": "내보내기에 실패했습니다",
       "failed": "폴더 작업을 완료하지 못했습니다"
     }
+  },
+  "mcpFolders": {
+    "unfiled": "미분류",
+    "newFolderEllipsis": "새 폴더…",
+    "newFolderTitle": "새 폴더",
+    "renameTitle": "폴더 이름 바꾸기",
+    "nameLabel": "폴더 이름",
+    "namePlaceholder": "예: 데이터베이스",
+    "create": "만들기",
+    "rename": "이름 바꾸기",
+    "delete": "폴더 삭제",
+    "deleteTitle": "폴더 {{name}}을(를) 삭제할까요?",
+    "deleteBody": "그룹만 해제합니다. 안에 있는 MCP 서버는 삭제되지 않고 '미분류'로 돌아갑니다.",
+    "moveTo": "이동",
+    "moveOut": "폴더에서 빼기(미분류)",
+    "expandAria": "폴더 {{name}} 펼치기",
+    "collapseAria": "폴더 {{name}} 접기",
+    "moreAria": "폴더 {{name}}의 추가 작업",
+    "selectAllAria": "폴더 {{name}}의 서버 모두 선택",
+    "cell": {
+      "all": "{{name}} · {{app}}: 모두 활성화됨. 클릭하면 모두 비활성화합니다",
+      "some": "{{name}} · {{app}}: 일부 활성화됨. 클릭하면 나머지도 활성화합니다",
+      "none": "{{name}} · {{app}}: 모두 비활성. 클릭하면 모두 활성화합니다"
+    },
+    "toast": {
+      "created": "폴더 {{name}}을(를) 만들었습니다",
+      "deleted": "폴더 {{name}}을(를) 삭제했습니다",
+      "moved": "MCP 서버 {{count}}개를 {{name}}(으)로 옮겼습니다",
+      "movedOut": "MCP 서버 {{count}}개를 폴더에서 뺐습니다",
+      "failed": "폴더 작업을 완료하지 못했습니다"
+    },
+    "selectAllListAria": "현재 목록 모두 선택",
+    "selectAria": "{{name}} 선택",
+    "selected": "{{count}}개 선택됨",
+    "bulk": {
+      "enabled": "{{app}}용 MCP 서버 {{count}}개를 이 프로젝트에 기록했습니다",
+      "disabled": "{{app}}의 MCP 서버 {{count}}개를 이 프로젝트에서 제거했습니다",
+      "conflicts": "{{count}}개는 설정 파일에 같은 이름의 항목이 있어 건너뛰었습니다. 바꾸려면 각 셀을 클릭해 확인하세요.",
+      "failed": "{{count}}개 실패: {{error}}"
+    }
   }
 }

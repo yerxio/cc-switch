@@ -25,6 +25,22 @@ import { DialogTitle } from "@/components/ui/dialog";
 import { HoverTip } from "@/components/ui/hover-tip";
 import { AppPageHeader } from "@/components/shell/AppPageHeader";
 import { ProjectScopeSelector } from "@/components/projectScope/ProjectScopeSelector";
+import { Checkbox } from "@/components/ui/checkbox";
+import type { Folder } from "@/lib/api/folders";
+import {
+  useCollapsedFolders,
+  useCreateFolder,
+  useDeleteFolder,
+  useFolders,
+  useMoveToFolder,
+  useRenameFolder,
+} from "@/hooks/useFolders";
+import {
+  buildFolderDisplayRows,
+  FolderHeaderRow,
+  FolderNameDialog,
+  MoveToFolderMenu,
+} from "@/components/common/folders";
 import { ProjectScopeMatrix } from "@/components/projectScope/ProjectScopeMatrix";
 import {
   useScopedProjects,
@@ -151,6 +167,9 @@ interface ImportReport {
  * MCP 全局页（v7）：页头 + 应用矩阵 + 添加 / 编辑抽屉。
  * 以这里为准写进勾选的应用；不支持的应用（Claude Desktop、OpenClaw）没有列。
  */
+const EMPTY_FOLDERS: Folder[] = [];
+const EMPTY_ASSIGNMENTS: Record<string, string> = {};
+
 const UnifiedMcpPanel: React.FC<UnifiedMcpPanelProps> = ({
   onInteractionBlockedChange,
 }) => {
@@ -197,6 +216,26 @@ const UnifiedMcpPanel: React.FC<UnifiedMcpPanelProps> = ({
   // 外观上的禁用晚 300ms 才出现：点一个格子写得很快时不让整页按钮闪一下变灰。
   // 写入本身仍由写锁（writeLockRef / interactionBlocked）拦着。
   const controlsDisabled = useDelayedFlag(interactionBlocked);
+
+  // 文件夹：和 Skills 那边同一套实现，各有各的文件夹。纯收纳视图，不改变写进
+  // 各应用配置文件里的任何内容。
+  const { data: folderState } = useFolders("mcp");
+  const folders = folderState?.folders ?? EMPTY_FOLDERS;
+  const folderAssignments = folderState?.assignments ?? EMPTY_ASSIGNMENTS;
+  const { collapsed: collapsedFolders, toggle: toggleFolder } =
+    useCollapsedFolders("mcp");
+  const createFolderMutation = useCreateFolder("mcp");
+  const renameFolderMutation = useRenameFolder("mcp");
+  const deleteFolderMutation = useDeleteFolder("mcp");
+  const moveToFolderMutation = useMoveToFolder("mcp");
+  /** 勾选的服务器：目前只用来移进文件夹 */
+  const [selected, setSelected] = useState<Set<string>>(() => new Set());
+  const [folderDialog, setFolderDialog] = useState<
+    | { mode: "create"; moveIds: string[] }
+    | { mode: "rename"; folder: Folder }
+    | null
+  >(null);
+  const [folderToDelete, setFolderToDelete] = useState<Folder | null>(null);
 
   // 项目级作用域：选中某个项目后，这张矩阵从 12 个工具收窄为 Claude Code / Codex
   // 两列，写入目标也从全局配置换成那个仓库里的文件。
@@ -260,6 +299,32 @@ const UnifiedMcpPanel: React.FC<UnifiedMcpPanelProps> = ({
     filteredServerEntries,
     normalizedSearchQuery ? "search" : null,
   );
+
+  // 文件夹行和服务器行混排；一个文件夹都没有时就是原来的扁平列表
+  const displayRows = useMemo(
+    () =>
+      buildFolderDisplayRows(
+        // 键才是权威的 id（值里的 id 字段理论上相同，这里以键为准）
+        filteredServerEntries.map(([id, server]) => ({ ...server, id })),
+        folders,
+        folderAssignments,
+        collapsedFolders,
+        Boolean(normalizedSearchQuery),
+      ),
+    [
+      filteredServerEntries,
+      folders,
+      folderAssignments,
+      collapsedFolders,
+      normalizedSearchQuery,
+    ],
+  );
+  const nVisibleSelected = filteredServerEntries.filter(([id]) =>
+    selected.has(id),
+  ).length;
+  const allVisibleSelected =
+    filteredServerEntries.length > 0 &&
+    nVisibleSelected === filteredServerEntries.length;
 
   const noun = t("mcpPage.noun");
 
@@ -448,10 +513,93 @@ const UnifiedMcpPanel: React.FC<UnifiedMcpPanelProps> = ({
     }
   };
 
-  const handleBulk = async (app: AppIdWith<"mcp">, enabled: boolean) => {
+  // ─── 文件夹 ─────────────────────────────────────────────────────────
+  const handleMoveToFolder = async (ids: string[], folderId: string | null) => {
+    if (ids.length === 0) return;
+    try {
+      await moveToFolderMutation.mutateAsync({ itemIds: ids, folderId });
+      const folder = folders.find((item) => item.id === folderId);
+      toast.success(
+        folder
+          ? t("mcpFolders.toast.moved", {
+              count: ids.length,
+              name: folder.name,
+            })
+          : t("mcpFolders.toast.movedOut", { count: ids.length }),
+        { closeButton: true },
+      );
+      setSelected(new Set());
+    } catch (error) {
+      toast.error(t("mcpFolders.toast.failed"), {
+        description: String(error),
+      });
+    }
+  };
+
+  const handleFolderNameSubmit = async (name: string) => {
+    if (!folderDialog) return;
+    try {
+      if (folderDialog.mode === "create") {
+        const created = await createFolderMutation.mutateAsync(name);
+        // 从「移动到… → 新建文件夹」进来的，建完直接把选中的移进去
+        if (folderDialog.moveIds.length > 0) {
+          await moveToFolderMutation.mutateAsync({
+            itemIds: folderDialog.moveIds,
+            folderId: created.id,
+          });
+          setSelected(new Set());
+          toast.success(
+            t("mcpFolders.toast.moved", {
+              count: folderDialog.moveIds.length,
+              name: created.name,
+            }),
+            { closeButton: true },
+          );
+        } else {
+          toast.success(t("mcpFolders.toast.created", { name: created.name }), {
+            closeButton: true,
+          });
+        }
+      } else {
+        await renameFolderMutation.mutateAsync({
+          id: folderDialog.folder.id,
+          name,
+        });
+      }
+      setFolderDialog(null);
+    } catch (error) {
+      // 重名之类的校验错误：留着取名框让用户改
+      toast.error(t("mcpFolders.toast.failed"), {
+        description: String(error),
+      });
+    }
+  };
+
+  const handleDeleteFolder = async () => {
+    if (!folderToDelete) return;
+    const target = folderToDelete;
+    setFolderToDelete(null);
+    try {
+      await deleteFolderMutation.mutateAsync(target.id);
+      toast.success(t("mcpFolders.toast.deleted", { name: target.name }), {
+        closeButton: true,
+      });
+    } catch (error) {
+      toast.error(t("mcpFolders.toast.failed"), {
+        description: String(error),
+      });
+    }
+  };
+
+  // `rows` 默认是列头批量的范围（当前搜索出的行）；文件夹行上的格子传它自己的成员
+  const handleBulk = async (
+    app: AppIdWith<"mcp">,
+    enabled: boolean,
+    rows: readonly (readonly [string, McpServer])[] = scope.rows,
+  ) => {
     if (!beginWrite()) return;
     try {
-      const targets = scope.rows
+      const targets = rows
         .filter(([, server]) => Boolean(server.apps[app]) !== enabled)
         .map(([id]) => ({ id, app }));
       if (targets.length === 0) return;
@@ -703,6 +851,15 @@ const UnifiedMcpPanel: React.FC<UnifiedMcpPanelProps> = ({
                 >
                   {t("mcpPage.copyAll")}
                 </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  disabled={controlsDisabled}
+                  onSelect={() =>
+                    setFolderDialog({ mode: "create", moveIds: [] })
+                  }
+                >
+                  {t("mcpFolders.newFolderEllipsis")}
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </>
@@ -744,17 +901,51 @@ const UnifiedMcpPanel: React.FC<UnifiedMcpPanelProps> = ({
                       : ""
                   }
                 />
-                <span className="shrink-0 whitespace-nowrap text-caption tabular-nums text-fg-2">
-                  {normalizedSearchQuery
-                    ? t("mcpPage.countFiltered", {
-                        shown: filteredServerEntries.length,
-                        count: serverEntries.length,
-                      })
-                    : t("mcpPage.count", { count: serverEntries.length })}
-                </span>
-                <span className="ms-auto min-w-0 truncate text-caption text-fg-2">
-                  {t("mcpPage.overwriteNote")}
-                </span>
+                {selected.size > 0 ? (
+                  // 勾了行之后这里换成批量栏：目前只有移进文件夹
+                  <div className="flex shrink-0 items-center gap-0.5">
+                    <span className="shrink-0 whitespace-nowrap pe-1.5 text-body font-medium tabular-nums">
+                      {t("mcpFolders.selected", { count: selected.size })}
+                    </span>
+                    <MoveToFolderMenu
+                      ns="mcpFolders"
+                      folders={folders}
+                      disabled={controlsDisabled}
+                      onPick={(folderId) =>
+                        void handleMoveToFolder([...selected], folderId)
+                      }
+                      onCreate={() =>
+                        setFolderDialog({
+                          mode: "create",
+                          moveIds: [...selected],
+                        })
+                      }
+                    />
+                    <Button
+                      type="button"
+                      variant="quiet"
+                      size="compact"
+                      className="px-2 text-fg-2"
+                      onClick={() => setSelected(new Set())}
+                    >
+                      {t("common.cancel")}
+                    </Button>
+                  </div>
+                ) : (
+                  <>
+                    <span className="shrink-0 whitespace-nowrap text-caption tabular-nums text-fg-2">
+                      {normalizedSearchQuery
+                        ? t("mcpPage.countFiltered", {
+                            shown: filteredServerEntries.length,
+                            count: serverEntries.length,
+                          })
+                        : t("mcpPage.count", { count: serverEntries.length })}
+                    </span>
+                    <span className="ms-auto min-w-0 truncate text-caption text-fg-2">
+                      {t("mcpPage.overwriteNote")}
+                    </span>
+                  </>
+                )}
               </div>
             )}
 
@@ -852,8 +1043,32 @@ const UnifiedMcpPanel: React.FC<UnifiedMcpPanelProps> = ({
                 >
                   <MatrixColumnHighlight>
                     <div className="min-w-[560px]">
-                      <div className="sticky top-0 z-10 flex h-11 items-center border-b border-border bg-subtle pe-2 ps-4">
-                        <span className="min-w-0 flex-1 text-caption font-semibold text-fg-2">
+                      <div className="sticky top-0 z-10 flex h-11 items-center border-b border-border bg-subtle pe-2 ps-2">
+                        <span className="flex w-6 shrink-0 justify-center">
+                          <Checkbox
+                            aria-label={t("mcpFolders.selectAllListAria")}
+                            disabled={filteredServerEntries.length === 0}
+                            checked={
+                              allVisibleSelected
+                                ? true
+                                : nVisibleSelected > 0
+                                  ? "indeterminate"
+                                  : false
+                            }
+                            onCheckedChange={() =>
+                              // 只管当前搜索出来的这些行；半选时点一下补齐
+                              setSelected((prev) => {
+                                const next = new Set(prev);
+                                for (const [id] of filteredServerEntries) {
+                                  if (allVisibleSelected) next.delete(id);
+                                  else next.add(id);
+                                }
+                                return next;
+                              })
+                            }
+                          />
+                        </span>
+                        <span className="ms-2 min-w-0 flex-1 text-caption font-semibold text-fg-2">
                           {t("mcpPage.columnName")}
                         </span>
                         <div className="flex shrink-0">
@@ -910,7 +1125,69 @@ const UnifiedMcpPanel: React.FC<UnifiedMcpPanelProps> = ({
                           aria-label={t("mcpPage.listLabel")}
                           className="m-0 list-none p-0"
                         >
-                          {filteredServerEntries.map(([id, server], index) => {
+                          {displayRows.map((row, index) => {
+                            if (row.kind === "folder") {
+                              const { folder } = row;
+                              const name =
+                                folder?.name ?? t("mcpFolders.unfiled");
+                              return (
+                                <FolderHeaderRow
+                                  key={`folder:${row.key}`}
+                                  ns="mcpFolders"
+                                  name={name}
+                                  items={row.items}
+                                  collapsed={row.collapsed}
+                                  first={index === 0}
+                                  appIds={appIds}
+                                  disabled={controlsDisabled}
+                                  // 和下面服务器行的行尾（编辑 + ⋯）同宽，格子才对得齐
+                                  trailingClassName="w-16"
+                                  selectedCount={
+                                    row.items.filter((item) =>
+                                      selected.has(item.id),
+                                    ).length
+                                  }
+                                  onPickAll={(select) =>
+                                    setSelected((prev) => {
+                                      const next = new Set(prev);
+                                      for (const item of row.items) {
+                                        if (select) next.add(item.id);
+                                        else next.delete(item.id);
+                                      }
+                                      return next;
+                                    })
+                                  }
+                                  onToggleCollapsed={() =>
+                                    toggleFolder(row.key)
+                                  }
+                                  onCell={(app, enable) =>
+                                    void handleBulk(
+                                      app as AppIdWith<"mcp">,
+                                      enable,
+                                      row.items.map(
+                                        (item) => [item.id, item] as const,
+                                      ),
+                                    )
+                                  }
+                                  onRename={
+                                    folder
+                                      ? () =>
+                                          setFolderDialog({
+                                            mode: "rename",
+                                            folder,
+                                          })
+                                      : undefined
+                                  }
+                                  onDelete={
+                                    folder
+                                      ? () => setFolderToDelete(folder)
+                                      : undefined
+                                  }
+                                />
+                              );
+                            }
+                            const server = row.item;
+                            const id = server.id;
                             const enabled = APP_IDS_WITH.mcp.some(
                               (app) => server.apps[app],
                             );
@@ -938,11 +1215,33 @@ const UnifiedMcpPanel: React.FC<UnifiedMcpPanelProps> = ({
                                 key={id}
                                 onClick={() => openEdit(id)}
                                 className={cn(
-                                  "flex h-14 cursor-pointer items-center pe-2 ps-4 transition-colors duration-150 hover:bg-subtle",
+                                  "flex h-14 cursor-pointer items-center pe-2 ps-2 transition-colors duration-150 hover:bg-subtle",
                                   index > 0 && "border-t border-border",
                                 )}
                               >
-                                <div className="flex min-w-0 flex-1 flex-col pe-3">
+                                {/* 整行点一下是进编辑，复选框得拦住，不然勾选就变成打开抽屉了 */}
+                                <span
+                                  className="flex w-6 shrink-0 justify-center"
+                                  onClick={(event) => event.stopPropagation()}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    className="ui-checkbox"
+                                    aria-label={t("mcpFolders.selectAria", {
+                                      name: server.name?.trim() || id,
+                                    })}
+                                    checked={selected.has(id)}
+                                    onChange={(event) =>
+                                      setSelected((prev) => {
+                                        const next = new Set(prev);
+                                        if (event.target.checked) next.add(id);
+                                        else next.delete(id);
+                                        return next;
+                                      })
+                                    }
+                                  />
+                                </span>
+                                <div className="ms-2 flex min-w-0 flex-1 flex-col pe-3">
                                   <div className="flex min-w-0 items-center gap-1.5">
                                     <span
                                       role="img"
@@ -1161,6 +1460,44 @@ const UnifiedMcpPanel: React.FC<UnifiedMcpPanelProps> = ({
           </>
         )}
       </div>
+
+      <FolderNameDialog
+        ns="mcpFolders"
+        open={folderDialog !== null}
+        title={t(
+          folderDialog?.mode === "rename"
+            ? "mcpFolders.renameTitle"
+            : "mcpFolders.newFolderTitle",
+        )}
+        confirmLabel={t(
+          folderDialog?.mode === "rename"
+            ? "mcpFolders.rename"
+            : "mcpFolders.create",
+        )}
+        initialName={
+          folderDialog?.mode === "rename" ? folderDialog.folder.name : ""
+        }
+        pending={
+          createFolderMutation.isPending ||
+          renameFolderMutation.isPending ||
+          moveToFolderMutation.isPending
+        }
+        onSubmit={(name) => void handleFolderNameSubmit(name)}
+        onCancel={() => setFolderDialog(null)}
+      />
+      <V7ConfirmDialog
+        open={folderToDelete !== null}
+        // 只是解散分组，里面的服务器一个都不删：不用红色确认键
+        danger={false}
+        title={t("mcpFolders.deleteTitle", {
+          name: folderToDelete?.name ?? "",
+        })}
+        body={t("mcpFolders.deleteBody")}
+        confirmLabel={t("mcpFolders.delete")}
+        pending={deleteFolderMutation.isPending}
+        onConfirm={() => void handleDeleteFolder()}
+        onCancel={() => setFolderToDelete(null)}
+      />
 
       {drawer && (
         <McpFormModal

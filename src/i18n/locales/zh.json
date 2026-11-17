@@ -5533,5 +5533,45 @@
       "exportFailed": "导出失败",
       "failed": "文件夹操作没成功"
     }
+  },
+  "mcpFolders": {
+    "unfiled": "未分类",
+    "newFolderEllipsis": "新建文件夹…",
+    "newFolderTitle": "新建文件夹",
+    "renameTitle": "重命名文件夹",
+    "nameLabel": "文件夹名",
+    "namePlaceholder": "例如：数据库",
+    "create": "创建",
+    "rename": "重命名",
+    "delete": "删除文件夹",
+    "deleteTitle": "删除文件夹 {{name}}？",
+    "deleteBody": "只是解散这个分组，里面的 MCP 服务器不会被删除，会回到「未分类」。",
+    "moveTo": "移动到",
+    "moveOut": "移出文件夹（未分类）",
+    "expandAria": "展开文件夹 {{name}}",
+    "collapseAria": "折叠文件夹 {{name}}",
+    "moreAria": "文件夹 {{name}} 的更多操作",
+    "selectAllAria": "选中文件夹 {{name}} 里的全部服务器",
+    "cell": {
+      "all": "{{name}} · {{app}}：全部已启用，点一下全部停用",
+      "some": "{{name}} · {{app}}：部分已启用，点一下把剩下的都启用",
+      "none": "{{name}} · {{app}}：都没启用，点一下全部启用"
+    },
+    "toast": {
+      "created": "已创建文件夹 {{name}}",
+      "deleted": "已删除文件夹 {{name}}",
+      "moved": "已把 {{count}} 个 MCP 服务器移到 {{name}}",
+      "movedOut": "已把 {{count}} 个 MCP 服务器移出文件夹",
+      "failed": "文件夹操作没成功"
+    },
+    "selectAllListAria": "全选当前列表",
+    "selectAria": "选择 {{name}}",
+    "selected": "已选 {{count}}",
+    "bulk": {
+      "enabled": "已为 {{app}} 写入 {{count}} 个 MCP 服务器到这个项目",
+      "disabled": "已从这个项目撤掉 {{app}} 的 {{count}} 个 MCP 服务器",
+      "conflicts": "{{count}} 个因配置文件里已有同名条目被跳过，要替换请逐个点它的格子确认。",
+      "failed": "{{count}} 个失败：{{error}}"
+    }
   }
 }

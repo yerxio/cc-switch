@@ -14,17 +14,17 @@ import {
 } from "@/components/mcp/AppMatrix";
 import { cn } from "@/lib/utils";
 import {
-  useBulkToggleProjectSkills,
+  useBulkToggleProjectItems,
   useProjectScopeState,
   useResyncProjectScope,
   useToggleProjectMcp,
   useToggleProjectSkill,
 } from "@/hooks/useProjectScope";
-import { useCollapsedFolders, useSkillFolders } from "@/hooks/useSkillFolders";
+import { useCollapsedFolders, useFolders } from "@/hooks/useFolders";
 import {
-  buildSkillDisplayRows,
+  buildFolderDisplayRows,
   type FolderAppState,
-} from "@/components/skills/skillFolders";
+} from "@/components/common/folders";
 import type {
   ProjectCell,
   ProjectItemState,
@@ -98,12 +98,14 @@ export function ProjectScopeMatrix({
   const toggleMcp = useToggleProjectMcp();
   const toggleSkill = useToggleProjectSkill();
   const resync = useResyncProjectScope();
-  const bulkSkills = useBulkToggleProjectSkills();
-  // 和全局面板是同一套文件夹、同一份折叠状态：文件夹是 Skill 的收纳方式，
-  // 不分作用域。MCP 没有文件夹。
-  const { data: folderState } = useSkillFolders();
+  const bulkItems = useBulkToggleProjectItems();
+  // 和全局面板是同一套文件夹、同一份折叠状态：文件夹是条目的收纳方式，不分
+  // 作用域。Skills 和 MCP 各有各的文件夹，这里按当前看的是哪一类来取。
+  const folderScope = kind === "mcp" ? "mcp" : "skills";
+  const folderNs = kind === "mcp" ? "mcpFolders" : "skillFolders";
+  const { data: folderState } = useFolders(folderScope);
   const { collapsed: collapsedFolders, toggle: toggleFolder } =
-    useCollapsedFolders();
+    useCollapsedFolders(folderScope);
   const [search, setSearch] = React.useState("");
   const [conflict, setConflict] = React.useState<PendingConflict | null>(null);
 
@@ -111,7 +113,7 @@ export function ProjectScopeMatrix({
     disabled ||
     toggleMcp.isPending ||
     toggleSkill.isPending ||
-    bulkSkills.isPending ||
+    bulkItems.isPending ||
     resync.isPending;
 
   const rows: ProjectItemState[] = React.useMemo(() => {
@@ -186,14 +188,14 @@ export function ProjectScopeMatrix({
 
   const displayRows = React.useMemo(
     () =>
-      buildSkillDisplayRows(
+      buildFolderDisplayRows(
         visibleRows,
-        kind === "skill" ? (folderState?.folders ?? []) : [],
+        folderState?.folders ?? [],
         folderState?.assignments ?? {},
         collapsedFolders,
         Boolean(query),
       ),
-    [visibleRows, kind, folderState, collapsedFolders, query],
+    [visibleRows, folderState, collapsedFolders, query],
   );
 
   /** 文件夹行上的格子：把整个文件夹在这个项目里统一绑定 / 解绑 */
@@ -202,42 +204,44 @@ export function ProjectScopeMatrix({
     app: ProjectScopeApp,
     enable: boolean,
   ) => {
-    const skillIds = members
+    const itemIds = members
       .filter(
         (row) =>
           (app === "claude" ? row.claude.bound : row.codex.bound) !== enable,
       )
       .map((row) => row.id);
-    if (skillIds.length === 0) return;
+    if (itemIds.length === 0) return;
+    // 两类的措辞不同（Skill 是目录、MCP 是配置文件里的条目）
+    const bulkNs =
+      kind === "mcp" ? "mcpFolders.bulk" : "projectScope.folderBulk";
     try {
-      const result = await bulkSkills.mutateAsync({
+      const result = await bulkItems.mutateAsync({
+        kind,
         projectId,
-        skillIds,
+        itemIds,
         app,
         enabled: enable,
       });
       const notes: string[] = [];
       if (result.conflicts.length > 0) {
         notes.push(
-          t("projectScope.folderBulk.conflicts", {
+          t(`${bulkNs}.conflicts`, {
             count: result.conflicts.length,
           }),
         );
       }
       if (result.failed.length > 0) {
         notes.push(
-          t("projectScope.folderBulk.failed", {
+          t(`${bulkNs}.failed`, {
             count: result.failed.length,
             error: result.failed[0].error,
           }),
         );
       }
-      const text = t(
-        enable
-          ? "projectScope.folderBulk.enabled"
-          : "projectScope.folderBulk.disabled",
-        { count: result.applied.length, app: APP_DISPLAY_NAME[app] },
-      );
+      const text = t(enable ? `${bulkNs}.enabled` : `${bulkNs}.disabled`, {
+        count: result.applied.length,
+        app: APP_DISPLAY_NAME[app],
+      });
       const options = {
         description: notes.length > 0 ? notes.join(" ") : undefined,
         closeButton: true,
@@ -393,7 +397,7 @@ export function ProjectScopeMatrix({
 
             {displayRows.map((entry) => {
               if (entry.kind === "folder") {
-                const name = entry.folder?.name ?? t("skillFolders.unfiled");
+                const name = entry.folder?.name ?? t(`${folderNs}.unfiled`);
                 const Chevron = entry.collapsed ? ChevronRight : ChevronDown;
                 return (
                   <div
@@ -406,8 +410,8 @@ export function ProjectScopeMatrix({
                       aria-expanded={!entry.collapsed}
                       aria-label={t(
                         entry.collapsed
-                          ? "skillFolders.expandAria"
-                          : "skillFolders.collapseAria",
+                          ? `${folderNs}.expandAria`
+                          : `${folderNs}.collapseAria`,
                         { name },
                       )}
                       onClick={() => toggleFolder(entry.key)}
@@ -425,24 +429,24 @@ export function ProjectScopeMatrix({
                         {name}
                       </span>
                       <span className="shrink-0 text-caption tabular-nums text-fg-2">
-                        {entry.skills.length}
+                        {entry.items.length}
                       </span>
                     </button>
                     {COLUMNS.map((app) => {
-                      const folderState_ = folderBindState(entry.skills, app);
+                      const folderState_ = folderBindState(entry.items, app);
                       return (
                         <MatrixCell
                           key={app}
                           app={app}
                           state={FOLDER_CELL_STATE[folderState_]}
-                          disabled={busy || entry.skills.length === 0}
+                          disabled={busy || entry.items.length === 0}
                           label={t(`projectScope.folderCell.${folderState_}`, {
                             name,
                             app: APP_DISPLAY_NAME[app],
                           })}
                           onClick={() =>
                             void handleFolderToggle(
-                              entry.skills,
+                              entry.items,
                               app,
                               folderState_ !== "all",
                             )
@@ -453,7 +457,7 @@ export function ProjectScopeMatrix({
                   </div>
                 );
               }
-              const row = entry.skill;
+              const row = entry.item;
               return (
                 <div
                   key={row.id}

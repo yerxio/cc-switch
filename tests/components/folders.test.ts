@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
-  buildSkillDisplayRows,
+  buildFolderDisplayRows,
   folderAppState,
   UNFILED_KEY,
-} from "@/components/skills/skillFolders";
+} from "@/components/common/folders";
 import type { InstalledSkill } from "@/lib/api/skills";
-import type { SkillFolder } from "@/lib/api/skillFolders";
+import type { Folder } from "@/lib/api/folders";
 
 const skill = (id: string, apps: Partial<InstalledSkill["apps"]> = {}) =>
   ({
@@ -16,29 +16,29 @@ const skill = (id: string, apps: Partial<InstalledSkill["apps"]> = {}) =>
     installedAt: 0,
   }) as unknown as InstalledSkill;
 
-const folder = (id: string, name = id): SkillFolder => ({
+const folder = (id: string, name = id): Folder => ({
   id,
   name,
   sortOrder: 0,
 });
 
-const shape = (rows: ReturnType<typeof buildSkillDisplayRows>) =>
+const shape = (rows: ReturnType<typeof buildFolderDisplayRows>) =>
   rows.map((row) =>
-    row.kind === "folder" ? `[${row.key}:${row.skills.length}]` : row.key,
+    row.kind === "folder" ? `[${row.key}:${row.items.length}]` : row.key,
   );
 
-describe("buildSkillDisplayRows", () => {
+describe("buildFolderDisplayRows", () => {
   const skills = [skill("a"), skill("b"), skill("c")];
 
   it("stays a flat list when no folder exists", () => {
     // 没用上文件夹的人，看到的界面必须和以前一模一样
     expect(
-      shape(buildSkillDisplayRows(skills, [], {}, new Set(), false)),
+      shape(buildFolderDisplayRows(skills, [], {}, new Set(), false)),
     ).toEqual(["a", "b", "c"]);
   });
 
   it("groups Skills under their folder and puts the rest under Unfiled last", () => {
-    const rows = buildSkillDisplayRows(
+    const rows = buildFolderDisplayRows(
       skills,
       [folder("web"), folder("rev")],
       { a: "rev", b: "web" },
@@ -56,7 +56,7 @@ describe("buildSkillDisplayRows", () => {
   });
 
   it("keeps a collapsed folder's header and count but hides its Skills", () => {
-    const rows = buildSkillDisplayRows(
+    const rows = buildFolderDisplayRows(
       skills,
       [folder("web")],
       { a: "web", b: "web" },
@@ -73,19 +73,19 @@ describe("buildSkillDisplayRows", () => {
     // 平时：空文件夹也要在，不然刚建的文件夹看不见
     expect(
       shape(
-        buildSkillDisplayRows(skills, folders, assignments, new Set(), false),
+        buildFolderDisplayRows(skills, folders, assignments, new Set(), false),
       ),
     ).toContain("[empty:0]");
     // 搜索 / 筛选时：没有命中项的文件夹不显示，免得一排空标题
     expect(
       shape(
-        buildSkillDisplayRows(skills, folders, assignments, new Set(), true),
+        buildFolderDisplayRows(skills, folders, assignments, new Set(), true),
       ),
     ).not.toContain("[empty:0]");
   });
 
   it("treats a Skill assigned to a folder that no longer exists as unfiled", () => {
-    const rows = buildSkillDisplayRows(
+    const rows = buildFolderDisplayRows(
       [skill("a")],
       [folder("web")],
       { a: "deleted-folder" },
