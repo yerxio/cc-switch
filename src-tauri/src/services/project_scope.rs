@@ -16,8 +16,9 @@
 //!
 //! ## 两条硬规则
 //!
-//! 1. **不覆盖别人的东西**：目标文件里已有同名条目、但 CC Switch 没有对应绑定记录
-//!    （队友提交的、用户手写的），一律拒绝写入并如实报错，而不是悄悄顶掉。
+//! 1. **同名不悄悄覆盖**：目标文件里已有同名条目（或 skills 目录下已有同名目录）
+//!    时，先把冲突如实报给界面，由用户决定是否强制覆盖——不判断那条是谁写的，
+//!    「有没有记账」不是溯源，拿它当判据只会在自己的条目上误伤（见 #强制覆盖）。
 //! 2. **撤销要干净**：取消绑定后若 `mcpServers` / `[mcp_servers]` 空了就把文件删掉，
 //!    不在用户仓库里留 `{"mcpServers":{}}` 这种残骸。
 
@@ -31,7 +32,7 @@ use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 
 use crate::app_config::AppType;
-use crate::database::{Database, ProjectBindingRow, ScopedProjectRow};
+use crate::database::{Database, ScopedProjectRow};
 use crate::error::AppError;
 use crate::services::skill::SkillService;
 
@@ -137,8 +138,8 @@ pub struct ProjectCell {
     pub bound: bool,
     /// 全局已启用（继承态；项目级再写一份会覆盖全局那份）
     pub global: bool,
-    /// 仓库里已存在同名条目，但不是 CC Switch 写的——拒绝覆盖
-    pub foreign: bool,
+    /// 仓库里已存在同名条目而项目级没绑它：点下去会先问要不要强制覆盖
+    pub conflict: bool,
 }
 
 /// 一行（一个 MCP server 或一个 Skill）在这个项目里的状态
@@ -151,16 +152,6 @@ pub struct ProjectItemState {
     pub codex: ProjectCell,
 }
 
-/// 仓库里存在、但 CC Switch 不认识的条目（只报告，不动它）
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ForeignEntry {
-    /// `mcp` | `skill`
-    pub kind: String,
-    pub app: String,
-    pub key: String,
-}
-
 /// 面板一次拉取的全部状态
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -170,7 +161,6 @@ pub struct ProjectScopeState {
     pub skills: Vec<ProjectItemState>,
     /// Codex 项目 MCP 只在受信任项目里生效；不信任时界面要提示用户自己去信任
     pub codex_trust: CodexTrust,
-    pub foreign: Vec<ForeignEntry>,
     /// 会写到仓库里的文件/目录，界面上明示「这些会进版本库」
     pub targets: ProjectTargets,
 }
@@ -196,6 +186,24 @@ impl Default for ProjectTargets {
             codex_skills: ".agents/skills/".into(),
         }
     }
+}
+
+/// 一次开关的结果。
+///
+/// `Conflict` 不是错误：目标位置已经有同名的东西，界面据此弹一次确认，用户点
+/// 「强制覆盖」就带 `force = true` 再调一次。
+#[derive(Debug, Clone, Serialize)]
+#[serde(tag = "status", rename_all = "camelCase")]
+pub enum ToggleOutcome {
+    /// 已写入（或已撤销）
+    Applied,
+    /// 同名冲突，等用户确认
+    Conflict {
+        /// 冲突的键名 / 目录名
+        key: String,
+        /// 冲突落在哪个文件或目录（展示给用户）
+        path: String,
+    },
 }
 
 /// 一次全量重投的结果
@@ -465,14 +473,10 @@ impl ProjectScopeService {
             );
         }
 
-        let mut foreign = Vec::new();
-
         // ---- MCP 行 ----
         let servers = db.get_all_mcp_servers()?;
         let mut mcp_rows = Vec::new();
-        let mut known_mcp_keys: BTreeSet<String> = BTreeSet::new();
         for (id, server) in servers.iter() {
-            known_mcp_keys.insert(id.clone());
             let mut cells = Vec::new();
             for app in ProjectApp::all() {
                 let is_bound =
@@ -483,7 +487,7 @@ impl ProjectScopeService {
                 cells.push(ProjectCell {
                     bound: is_bound,
                     global: server.apps.is_enabled_for(&app.app_type()),
-                    foreign: in_file && !is_bound,
+                    conflict: in_file && !is_bound,
                 });
             }
             mcp_rows.push(ProjectItemState {
@@ -497,9 +501,7 @@ impl ProjectScopeService {
         // ---- Skills 行 ----
         let skills = db.get_all_installed_skills()?;
         let mut skill_rows = Vec::new();
-        let mut known_skill_dirs: BTreeSet<String> = BTreeSet::new();
         for (id, skill) in skills.iter() {
-            known_skill_dirs.insert(skill.directory.clone());
             let mut cells = Vec::new();
             for app in ProjectApp::all() {
                 let is_bound =
@@ -510,7 +512,7 @@ impl ProjectScopeService {
                 cells.push(ProjectCell {
                     bound: is_bound,
                     global: skill.apps.is_enabled_for(&app.app_type()),
-                    foreign: in_file && !is_bound,
+                    conflict: in_file && !is_bound,
                 });
             }
             skill_rows.push(ProjectItemState {
@@ -521,34 +523,11 @@ impl ProjectScopeService {
             });
         }
 
-        // ---- 仓库里完全不认识的条目 ----
-        for app in ProjectApp::all() {
-            if let Some(keys) = present.get(&(KIND_MCP.to_string(), app.as_str().to_string())) {
-                for key in keys.difference(&known_mcp_keys) {
-                    foreign.push(ForeignEntry {
-                        kind: KIND_MCP.to_string(),
-                        app: app.as_str().to_string(),
-                        key: key.clone(),
-                    });
-                }
-            }
-            if let Some(dirs) = present.get(&(KIND_SKILL.to_string(), app.as_str().to_string())) {
-                for dir in dirs.difference(&known_skill_dirs) {
-                    foreign.push(ForeignEntry {
-                        kind: KIND_SKILL.to_string(),
-                        app: app.as_str().to_string(),
-                        key: dir.clone(),
-                    });
-                }
-            }
-        }
-
         Ok(ProjectScopeState {
             project: ScopedProject::from_row(row),
             mcp: mcp_rows,
             skills: skill_rows,
             codex_trust: read_codex_trust(&root),
-            foreign,
             targets: ProjectTargets::default(),
         })
     }
@@ -562,17 +541,20 @@ impl ProjectScopeService {
         server_id: &str,
         app: ProjectApp,
         enabled: bool,
-    ) -> Result<(), AppError> {
+        force: bool,
+    ) -> Result<ToggleOutcome, AppError> {
         let root = Self::require_project_root(db, project_id)?;
         if enabled {
             let servers = db.get_all_mcp_servers()?;
             let server = servers
                 .get(server_id)
                 .ok_or_else(|| AppError::InvalidInput(format!("MCP 服务器不存在: {server_id}")))?;
-            let already_bound = Self::is_bound(db, project_id, KIND_MCP, server_id, app)?;
-            if !already_bound {
-                // 文件里已有同名键却没有绑定记录 → 是别人的，拒绝覆盖
-                ensure_not_foreign_mcp(&root, app, server_id)?;
+            // 同名即提示：不去判断那条是谁写的，交给用户决定要不要覆盖
+            if !force && read_mcp_keys(&root, app)?.contains(server_id) {
+                return Ok(ToggleOutcome::Conflict {
+                    key: server_id.to_string(),
+                    path: display_in_repo(&root, &mcp_file_for(&root, app)),
+                });
             }
             let spec = server.server.clone();
             crate::mcp::validation::validate_server_spec(&spec)?;
@@ -598,7 +580,7 @@ impl ProjectScopeService {
                 app.as_str()
             );
         }
-        Ok(())
+        Ok(ToggleOutcome::Applied)
     }
 
     /// 勾选/取消一个 Skill 在某项目某应用下的绑定
@@ -608,17 +590,21 @@ impl ProjectScopeService {
         skill_id: &str,
         app: ProjectApp,
         enabled: bool,
-    ) -> Result<(), AppError> {
+        force: bool,
+    ) -> Result<ToggleOutcome, AppError> {
         let root = Self::require_project_root(db, project_id)?;
         if enabled {
             let skill = db
                 .get_installed_skill(skill_id)?
                 .ok_or_else(|| AppError::InvalidInput(format!("Skill 不存在: {skill_id}")))?;
-            let already_bound = Self::is_bound(db, project_id, KIND_SKILL, skill_id, app)?;
-            if !already_bound {
-                ensure_not_foreign_skill(&root, app, &skill.directory)?;
-            }
             let dest_dir = skills_dir_for(&root, app);
+            // 强制覆盖会整个替换这个目录，所以没点确认前一步都不走
+            if !force && dest_dir.join(&skill.directory).exists() {
+                return Ok(ToggleOutcome::Conflict {
+                    key: skill.directory.clone(),
+                    path: display_in_repo(&root, &dest_dir.join(&skill.directory)),
+                });
+            }
             SkillService::sync_directory_into(&skill.directory, &dest_dir)
                 .map_err(|e| AppError::Config(e.to_string()))?;
             db.add_project_binding(
@@ -641,7 +627,7 @@ impl ProjectScopeService {
                 app.as_str()
             );
         }
-        Ok(())
+        Ok(ToggleOutcome::Applied)
     }
 
     /// 按库里的绑定全量重投一次（修复手改/误删造成的漂移）
@@ -748,21 +734,6 @@ impl ProjectScopeService {
             )));
         }
         Ok(root)
-    }
-
-    fn is_bound(
-        db: &Arc<Database>,
-        project_id: &str,
-        kind: &str,
-        item_id: &str,
-        app: ProjectApp,
-    ) -> Result<bool, AppError> {
-        Ok(db
-            .list_project_bindings(project_id)?
-            .iter()
-            .any(|binding: &ProjectBindingRow| {
-                binding.kind == kind && binding.item_id == item_id && binding.app == app.as_str()
-            }))
     }
 
     fn attach_mcp_file(
@@ -1099,31 +1070,20 @@ fn read_skill_dirs(root: &Path, app: ProjectApp) -> BTreeSet<String> {
         .collect()
 }
 
-fn ensure_not_foreign_mcp(root: &Path, app: ProjectApp, id: &str) -> Result<(), AppError> {
-    if read_mcp_keys(root, app)?.contains(id) {
-        let file = match app {
-            ProjectApp::Claude => claude_mcp_path(root),
-            ProjectApp::Codex => codex_config_path(root),
-        };
-        return Err(AppError::InvalidInput(format!(
-            "{} 里已有名为 {id} 的 MCP 服务器，且不是 CC Switch 写入的；\
-             请先在仓库里改名或删除它，以免覆盖手写/队友提交的配置",
-            file.display()
-        )));
+/// MCP 写进哪个文件（冲突提示里展示用）
+fn mcp_file_for(root: &Path, app: ProjectApp) -> PathBuf {
+    match app {
+        ProjectApp::Claude => claude_mcp_path(root),
+        ProjectApp::Codex => codex_config_path(root),
     }
-    Ok(())
 }
 
-fn ensure_not_foreign_skill(root: &Path, app: ProjectApp, directory: &str) -> Result<(), AppError> {
-    let dir = skills_dir_for(root, app);
-    let dest = dir.join(directory);
-    if dest.exists() {
-        return Err(AppError::InvalidInput(format!(
-            "{} 已存在，且不是 CC Switch 写入的；请先在仓库里改名或删除它",
-            dest.display()
-        )));
-    }
-    Ok(())
+/// 冲突提示只给仓库内的相对路径：绝对路径又长又没用
+fn display_in_repo(root: &Path, path: &Path) -> String {
+    path.strip_prefix(root)
+        .unwrap_or(path)
+        .to_string_lossy()
+        .replace(std::path::MAIN_SEPARATOR, "/")
 }
 
 /// 只读地判断 Codex 是否信任这个项目。
@@ -1287,6 +1247,7 @@ mod tests {
             "ctx7",
             ProjectApp::Claude,
             true,
+            false,
         )
         .expect("bind claude mcp");
 
@@ -1314,6 +1275,7 @@ mod tests {
             "ctx7",
             ProjectApp::Claude,
             false,
+            false,
         )
         .expect("unbind claude mcp");
         assert!(!mcp_file.exists(), ".mcp.json 空了就该删掉");
@@ -1336,6 +1298,7 @@ mod tests {
             "ctx7",
             ProjectApp::Codex,
             true,
+            false,
         )
         .expect("bind codex mcp");
 
@@ -1351,6 +1314,7 @@ mod tests {
             &fixture.project_id,
             "ctx7",
             ProjectApp::Codex,
+            false,
             false,
         )
         .expect("unbind codex mcp");
@@ -1380,10 +1344,24 @@ mod tests {
         .expect("seed config.toml");
 
         for app in ProjectApp::all() {
-            ProjectScopeService::toggle_mcp(&fixture.db, &fixture.project_id, "ctx7", app, true)
-                .expect("bind");
-            ProjectScopeService::toggle_mcp(&fixture.db, &fixture.project_id, "ctx7", app, false)
-                .expect("unbind");
+            ProjectScopeService::toggle_mcp(
+                &fixture.db,
+                &fixture.project_id,
+                "ctx7",
+                app,
+                true,
+                false,
+            )
+            .expect("bind");
+            ProjectScopeService::toggle_mcp(
+                &fixture.db,
+                &fixture.project_id,
+                "ctx7",
+                app,
+                false,
+                false,
+            )
+            .expect("unbind");
         }
 
         let json_after: Value =
@@ -1402,34 +1380,117 @@ mod tests {
         assert!(!toml_after.contains("[mcp_servers.ctx7]"));
     }
 
+    /// 同名时先报冲突、什么都不写；带 force 再来才覆盖。
     #[test]
     #[serial_test::serial]
-    fn refuses_to_overwrite_an_entry_cc_switch_did_not_write() {
+    fn a_name_clash_is_reported_first_and_overwritten_only_on_force() {
         let fixture = setup();
         seed_server(&fixture.db, "ctx7", McpApps::default());
         let root = repo_root(&fixture);
 
-        // 仓库里已有同名条目（队友提交的），且没有任何绑定记录
         let mcp_file = claude_mcp_path(&root);
         let original = "{\"mcpServers\":{\"ctx7\":{\"command\":\"their-own-binary\"}}}";
         fs::write(&mcp_file, original).expect("seed .mcp.json");
 
-        let error = ProjectScopeService::toggle_mcp(
+        let outcome = ProjectScopeService::toggle_mcp(
             &fixture.db,
             &fixture.project_id,
             "ctx7",
             ProjectApp::Claude,
             true,
+            false,
         )
-        .expect_err("同名外来条目必须拒绝写入");
-        assert!(
-            error.to_string().contains("ctx7"),
-            "报错要点明是哪个条目: {error}"
-        );
+        .expect("conflict is not an error");
+        match &outcome {
+            ToggleOutcome::Conflict { key, path } => {
+                assert_eq!(key, "ctx7");
+                assert_eq!(path, ".mcp.json", "提示里给仓库内的相对路径");
+            }
+            other => panic!("expected a conflict, got {other:?}"),
+        }
         assert_eq!(
             fs::read_to_string(&mcp_file).expect("read back"),
             original,
-            "拒绝之后文件必须一个字节都没动"
+            "报冲突时文件必须一个字节都没动"
+        );
+        assert!(
+            fixture
+                .db
+                .list_project_bindings(&fixture.project_id)
+                .expect("bindings")
+                .is_empty(),
+            "报冲突时也不该记账"
+        );
+
+        // 用户点了「强制覆盖」
+        let outcome = ProjectScopeService::toggle_mcp(
+            &fixture.db,
+            &fixture.project_id,
+            "ctx7",
+            ProjectApp::Claude,
+            true,
+            true,
+        )
+        .expect("forced bind");
+        assert!(matches!(outcome, ToggleOutcome::Applied));
+        let written: Value =
+            serde_json::from_str(&fs::read_to_string(&mcp_file).expect("read back"))
+                .expect("parse");
+        assert_eq!(
+            written["mcpServers"]["ctx7"]["command"],
+            json!("npx"),
+            "强制覆盖后是受管的那份定义"
+        );
+    }
+
+    /// Skill 的强制覆盖是整个目录替换，旧内容不留。
+    #[test]
+    #[serial_test::serial]
+    fn forcing_a_skill_replaces_the_whole_directory() {
+        let fixture = setup();
+        seed_skill(&fixture.db, "local:helper", "helper", SkillApps::default());
+        let root = repo_root(&fixture);
+
+        let dest = claude_skills_dir(&root).join("helper");
+        fs::create_dir_all(&dest).expect("mkdir existing skill");
+        fs::write(dest.join("SKILL.md"), "---\nname: theirs\n---\n").expect("write theirs");
+        fs::write(dest.join("their-notes.md"), "keep?").expect("write extra file");
+
+        let outcome = ProjectScopeService::toggle_skill(
+            &fixture.db,
+            &fixture.project_id,
+            "local:helper",
+            ProjectApp::Claude,
+            true,
+            false,
+        )
+        .expect("conflict is not an error");
+        match &outcome {
+            ToggleOutcome::Conflict { key, path } => {
+                assert_eq!(key, "helper");
+                assert_eq!(path, ".claude/skills/helper");
+            }
+            other => panic!("expected a conflict, got {other:?}"),
+        }
+        assert_eq!(
+            fs::read_to_string(dest.join("SKILL.md")).expect("still theirs"),
+            "---\nname: theirs\n---\n"
+        );
+
+        ProjectScopeService::toggle_skill(
+            &fixture.db,
+            &fixture.project_id,
+            "local:helper",
+            ProjectApp::Claude,
+            true,
+            true,
+        )
+        .expect("forced bind");
+        let manifest = fs::read_to_string(dest.join("SKILL.md")).expect("read manifest");
+        assert!(manifest.contains("name: helper"), "换成了受管的那份");
+        assert!(
+            !dest.join("their-notes.md").exists(),
+            "强制覆盖是整目录替换，旧文件不留"
         );
     }
 
@@ -1447,6 +1508,7 @@ mod tests {
                 "local:helper",
                 app,
                 true,
+                false,
             )
             .expect("bind skill");
         }
@@ -1477,6 +1539,7 @@ mod tests {
                 "local:helper",
                 app,
                 false,
+                false,
             )
             .expect("unbind skill");
         }
@@ -1504,27 +1567,43 @@ mod tests {
         let before = snapshot(&root);
 
         for app in ProjectApp::all() {
-            ProjectScopeService::toggle_mcp(&fixture.db, &fixture.project_id, "ctx7", app, true)
-                .expect("bind mcp");
+            ProjectScopeService::toggle_mcp(
+                &fixture.db,
+                &fixture.project_id,
+                "ctx7",
+                app,
+                true,
+                false,
+            )
+            .expect("bind mcp");
             ProjectScopeService::toggle_skill(
                 &fixture.db,
                 &fixture.project_id,
                 "local:helper",
                 app,
                 true,
+                false,
             )
             .expect("bind skill");
         }
         assert_ne!(snapshot(&root), before, "绑定应当确实写了东西");
 
         for app in ProjectApp::all() {
-            ProjectScopeService::toggle_mcp(&fixture.db, &fixture.project_id, "ctx7", app, false)
-                .expect("unbind mcp");
+            ProjectScopeService::toggle_mcp(
+                &fixture.db,
+                &fixture.project_id,
+                "ctx7",
+                app,
+                false,
+                false,
+            )
+            .expect("unbind mcp");
             ProjectScopeService::toggle_skill(
                 &fixture.db,
                 &fixture.project_id,
                 "local:helper",
                 app,
+                false,
                 false,
             )
             .expect("unbind skill");
@@ -1568,7 +1647,7 @@ mod tests {
 
     #[test]
     #[serial_test::serial]
-    fn state_reports_project_binding_global_inheritance_and_foreign_entries() {
+    fn state_reports_project_binding_global_inheritance_and_name_conflicts() {
         let fixture = setup();
         // 全局已启用给 Claude，项目级未绑定 → 继承态
         let mut claude_only = McpApps::default();
@@ -1589,14 +1668,15 @@ mod tests {
             "ctx7",
             ProjectApp::Codex,
             true,
+            false,
         )
         .expect("bind codex mcp");
 
-        // 仓库里塞一个 CC Switch 不认识的 skill
-        let foreign_dir = claude_skills_dir(&root).join("not-ours");
-        fs::create_dir_all(&foreign_dir).expect("mkdir foreign skill");
-        fs::write(foreign_dir.join("SKILL.md"), "---\nname: not-ours\n---\n")
-            .expect("write foreign SKILL.md");
+        // 仓库里塞一个同名的 skill 目录：该报成冲突
+        let clashing = claude_skills_dir(&root).join("helper");
+        fs::create_dir_all(&clashing).expect("mkdir clashing skill");
+        fs::write(clashing.join("SKILL.md"), "---\nname: helper\n---\n")
+            .expect("write clashing SKILL.md");
 
         let state =
             ProjectScopeService::read_state(&fixture.db, &fixture.project_id).expect("read state");
@@ -1608,6 +1688,7 @@ mod tests {
             .expect("mcp row");
         assert!(server_row.claude.global, "全局启用要报成继承态");
         assert!(!server_row.claude.bound);
+        assert!(!server_row.claude.conflict);
         assert!(server_row.codex.bound, "项目级绑定要报成已绑定");
         assert!(!server_row.codex.global);
 
@@ -1620,11 +1701,8 @@ mod tests {
         assert!(!skill_row.claude.bound);
 
         assert!(
-            state.foreign.iter().any(|entry| entry.key == "not-ours"
-                && entry.kind == "skill"
-                && entry.app == "claude"),
-            "仓库里不认识的条目要如实报出来: {:?}",
-            state.foreign
+            skill_row.claude.conflict,
+            "仓库里已有同名目录时要报成冲突，等用户决定是否强制覆盖"
         );
     }
 
@@ -1647,14 +1725,22 @@ mod tests {
         ];
 
         for app in ProjectApp::all() {
-            ProjectScopeService::toggle_mcp(&fixture.db, &fixture.project_id, "ctx7", app, true)
-                .expect("bind mcp");
+            ProjectScopeService::toggle_mcp(
+                &fixture.db,
+                &fixture.project_id,
+                "ctx7",
+                app,
+                true,
+                false,
+            )
+            .expect("bind mcp");
             ProjectScopeService::toggle_skill(
                 &fixture.db,
                 &fixture.project_id,
                 "local:helper",
                 app,
                 true,
+                false,
             )
             .expect("bind skill");
         }
@@ -1689,6 +1775,7 @@ mod tests {
             "ctx7",
             ProjectApp::Codex,
             true,
+            false,
         )
         .expect("bind codex mcp");
 
@@ -1716,6 +1803,7 @@ mod tests {
             "ctx7",
             ProjectApp::Claude,
             true,
+            false,
         )
         .expect("bind mcp");
         ProjectScopeService::toggle_skill(
@@ -1724,6 +1812,7 @@ mod tests {
             "local:helper",
             ProjectApp::Claude,
             true,
+            false,
         )
         .expect("bind skill");
 
@@ -1754,6 +1843,7 @@ mod tests {
             "local:helper",
             ProjectApp::Codex,
             true,
+            false,
         )
         .expect("bind skill");
         assert!(codex_skills_dir(&root).join("helper").exists());

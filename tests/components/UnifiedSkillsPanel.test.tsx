@@ -236,7 +236,7 @@ describe("UnifiedSkillsPanel", () => {
     m.scopeProjectId = null;
     m.projectScopeState = undefined;
     m.selectScope.mockReset();
-    m.toggleProjectSkill.mockReset().mockResolvedValue(undefined);
+    m.toggleProjectSkill.mockReset().mockResolvedValue({ status: "applied" });
     m.resyncProject.mockReset().mockResolvedValue({ applied: 0, failures: [] });
     m.updateSkill
       .mockReset()
@@ -1147,12 +1147,11 @@ describe("UnifiedSkillsPanel", () => {
           id: "owner/repo:alpha-skill",
           name: "Alpha Skill",
           // 全局给 Claude 开着、项目里没绑 → 继承态；Codex 两边都没有
-          claude: { bound: false, global: true, foreign: false },
-          codex: { bound: false, global: false, foreign: false },
+          claude: { bound: false, global: true, conflict: false },
+          codex: { bound: false, global: false, conflict: false },
         },
       ],
       codexTrust: "trusted",
-      foreign: [],
       targets: {
         claudeMcp: ".mcp.json",
         claudeApproval: ".claude/settings.local.json",
@@ -1173,6 +1172,7 @@ describe("UnifiedSkillsPanel", () => {
         skillId: "owner/repo:alpha-skill",
         app: "codex",
         enabled: true,
+        force: false,
       }),
     );
     expect(m.toggle).not.toHaveBeenCalled();
@@ -1183,7 +1183,7 @@ describe("UnifiedSkillsPanel", () => {
     ).toHaveAttribute("data-state", "inherited");
   });
 
-  it("refuses to overwrite a project entry CC Switch did not write", async () => {
+  it("asks before overwriting a project entry with the same name", async () => {
     m.installed = [makeSkill()];
     m.scopedProjects = [
       { id: "p1", path: "/repos/api", name: "api", addedAt: 0, exists: true },
@@ -1202,12 +1202,12 @@ describe("UnifiedSkillsPanel", () => {
         {
           id: "owner/repo:alpha-skill",
           name: "Alpha Skill",
-          claude: { bound: false, global: false, foreign: true },
-          codex: { bound: false, global: false, foreign: false },
+          // 仓库里已有同名目录
+          claude: { bound: false, global: false, conflict: true },
+          codex: { bound: false, global: false, conflict: false },
         },
       ],
       codexTrust: "untrusted",
-      foreign: [{ kind: "skill", app: "claude", key: "alpha-skill" }],
       targets: {
         claudeMcp: ".mcp.json",
         claudeApproval: ".claude/settings.local.json",
@@ -1216,21 +1216,42 @@ describe("UnifiedSkillsPanel", () => {
         codexSkills: ".agents/skills/",
       },
     };
+    // 不带 force 的那次返回冲突，带 force 的那次才写入
+    m.toggleProjectSkill
+      .mockReset()
+      .mockImplementation(async ({ force }: { force?: boolean }) =>
+        force
+          ? { status: "applied" }
+          : { status: "conflict", key: "alpha-skill", path: ".claude/skills/alpha-skill" },
+      );
     renderPanel();
 
     await userEvent.click(
-      screen.getByRole("button", { name: /projectScope.cellForeign/ }),
+      screen.getByRole("button", { name: /projectScope.cellConflict/ }),
+    );
+
+    // 先弹确认，且此时还没有强制写入
+    expect(
+      await screen.findByText("projectScope.conflictTitle"),
+    ).toBeInTheDocument();
+    expect(m.toggleProjectSkill).toHaveBeenCalledTimes(1);
+    expect(m.toggleProjectSkill).toHaveBeenLastCalledWith(
+      expect.objectContaining({ force: false }),
+    );
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "projectScope.conflictConfirm" }),
     );
     await waitFor(() =>
-      expect(m.toastWarning).toHaveBeenCalledWith(
-        "projectScope.foreignBlockedTitle",
+      expect(m.toggleProjectSkill).toHaveBeenLastCalledWith(
         expect.objectContaining({
-          description: "projectScope.foreignBlockedBody",
+          skillId: "owner/repo:alpha-skill",
+          app: "claude",
+          enabled: true,
+          force: true,
         }),
       ),
     );
-    // 仓库里那条不是我们写的，一个字节都不许动
-    expect(m.toggleProjectSkill).not.toHaveBeenCalled();
   });
 
 });

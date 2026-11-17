@@ -4,6 +4,7 @@ import { RefreshCw } from "lucide-react";
 import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/button";
 import { Notice, NoticeSlot } from "@/components/ui/notice";
+import { V7ConfirmDialog } from "@/components/mcp/formBits";
 import { AppGlyph, APP_DISPLAY_NAME } from "@/components/shell/AppGlyph";
 import {
   MatrixCell,
@@ -22,6 +23,7 @@ import type {
   ProjectCell,
   ProjectItemState,
   ProjectScopeApp,
+  ToggleOutcome,
 } from "@/lib/api/projectScope";
 
 /** 项目级第一版只有这两列 */
@@ -29,9 +31,18 @@ const COLUMNS: ProjectScopeApp[] = ["claude", "codex"];
 
 function cellState(cell: ProjectCell): MatrixCellState {
   if (cell.bound) return "on";
-  if (cell.foreign) return "fail";
+  // 同名冲突：点下去会先问，不是失败态，但要先让人看见
+  if (cell.conflict) return "fail";
   if (cell.global) return "inherited";
   return "off";
+}
+
+/** 等用户确认的同名冲突 */
+interface PendingConflict {
+  row: ProjectItemState;
+  app: ProjectScopeApp;
+  key: string;
+  path: string;
 }
 
 /**
@@ -63,6 +74,7 @@ export function ProjectScopeMatrix({
   const toggleSkill = useToggleProjectSkill();
   const resync = useResyncProjectScope();
   const [search, setSearch] = React.useState("");
+  const [conflict, setConflict] = React.useState<PendingConflict | null>(null);
 
   const busy =
     disabled ||
@@ -88,39 +100,40 @@ export function ProjectScopeMatrix({
     [rows, query],
   );
 
-  const foreignHere = (state?.foreign ?? []).filter(
-    (entry) => entry.kind === (kind === "mcp" ? "mcp" : "skill"),
-  );
+  const write = async (
+    row: ProjectItemState,
+    app: ProjectScopeApp,
+    enabled: boolean,
+    force: boolean,
+  ): Promise<ToggleOutcome> =>
+    kind === "mcp"
+      ? await toggleMcp.mutateAsync({
+          projectId,
+          serverId: row.id,
+          app,
+          enabled,
+          force,
+        })
+      : await toggleSkill.mutateAsync({
+          projectId,
+          skillId: row.id,
+          app,
+          enabled,
+          force,
+        });
 
   const handleToggle = async (
     row: ProjectItemState,
     app: ProjectScopeApp,
     cell: ProjectCell,
   ) => {
-    if (cell.foreign) {
-      // 外来同名条目：后端会拒绝，这里先把原因说清楚，省掉一次无意义的失败
-      toast.warning(t("projectScope.foreignBlockedTitle", { name: row.name }), {
-        description: t("projectScope.foreignBlockedBody"),
-        closeButton: true,
-      });
-      return;
-    }
     const enabled = !cell.bound;
     try {
-      if (kind === "mcp") {
-        await toggleMcp.mutateAsync({
-          projectId,
-          serverId: row.id,
-          app,
-          enabled,
-        });
-      } else {
-        await toggleSkill.mutateAsync({
-          projectId,
-          skillId: row.id,
-          app,
-          enabled,
-        });
+      const outcome = await write(row, app, enabled, false);
+      if (outcome.status === "conflict") {
+        // 仓库里已经有同名的东西：不判断那是谁写的，问一句再说
+        setConflict({ row, app, key: outcome.key, path: outcome.path });
+        return;
       }
       // 项目级覆盖全局是 Claude / Codex 自己的作用域规则，用户该知道这件事
       if (enabled && cell.global) {
@@ -135,6 +148,26 @@ export function ProjectScopeMatrix({
     } catch (toggleError) {
       toast.error(t("projectScope.toggleFailed", { name: row.name }), {
         description: String(toggleError),
+      });
+    }
+  };
+
+  const handleForce = async () => {
+    if (!conflict) return;
+    const { row, app } = conflict;
+    setConflict(null);
+    try {
+      await write(row, app, true, true);
+      toast.success(
+        t("projectScope.overwritten", {
+          name: row.name,
+          app: APP_DISPLAY_NAME[app],
+        }),
+        { closeButton: true },
+      );
+    } catch (forceError) {
+      toast.error(t("projectScope.toggleFailed", { name: row.name }), {
+        description: String(forceError),
       });
     }
   };
@@ -231,21 +264,6 @@ export function ProjectScopeMatrix({
             {t("projectScope.codexTrustBody", { path: state.project.path })}
           </Notice>
         )}
-
-        {foreignHere.length > 0 && (
-          <Notice tone="warning" title={t("projectScope.foreignTitle")}>
-            {t("projectScope.foreignBody", {
-              list: foreignHere
-                .map((entry) =>
-                  t("projectScope.foreignItem", {
-                    key: entry.key,
-                    app: APP_DISPLAY_NAME[entry.app],
-                  }),
-                )
-                .join(t("mcpPage.listSeparator")),
-            })}
-          </Notice>
-        )}
       </NoticeSlot>
 
       {rows.length === 0 ? (
@@ -300,7 +318,7 @@ export function ProjectScopeMatrix({
                           : state_ === "inherited"
                             ? "projectScope.cellInherited"
                             : state_ === "fail"
-                              ? "projectScope.cellForeign"
+                              ? "projectScope.cellConflict"
                               : "projectScope.cellOff",
                         { name: row.name, app: APP_DISPLAY_NAME[app] },
                       )}
@@ -317,6 +335,21 @@ export function ProjectScopeMatrix({
       <p className={cn("pt-3 text-caption text-fg-2")}>
         {t("projectScope.legend")}
       </p>
+
+      <V7ConfirmDialog
+        open={conflict !== null}
+        // 覆盖会顶掉仓库里现有的内容，Skill 还是整目录替换：红色确认键
+        danger
+        title={t("projectScope.conflictTitle", { key: conflict?.key ?? "" })}
+        body={t("projectScope.conflictBody", { path: conflict?.path ?? "" })}
+        details={
+          kind === "skill" ? t("projectScope.conflictSkillDetails") : undefined
+        }
+        confirmLabel={t("projectScope.conflictConfirm")}
+        pending={busy}
+        onConfirm={() => void handleForce()}
+        onCancel={() => setConflict(null)}
+      />
     </div>
   );
 }

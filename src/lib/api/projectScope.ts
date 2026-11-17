@@ -34,14 +34,14 @@ export interface ProjectCandidate {
 /** Codex 只在受信任的项目里加载 `.codex/` 层；这里只读、从不代写 */
 export type CodexTrust = "trusted" | "untrusted" | "unknown";
 
-/** 一个格子的三个事实，界面据此渲染三态 */
+/** 一个格子的三个事实，界面据此渲染四态 */
 export interface ProjectCell {
-  /** 项目级已绑定（这条是 CC Switch 写进仓库的） */
+  /** 项目级已绑定（CC Switch 已把它写进这个仓库） */
   bound: boolean;
   /** 全局已启用（继承态；项目级再写一份会覆盖全局那份） */
   global: boolean;
-  /** 仓库里已存在同名条目，但不是 CC Switch 写的——拒绝覆盖 */
-  foreign: boolean;
+  /** 仓库里已有同名条目而项目级没绑它：点下去会先问要不要强制覆盖 */
+  conflict: boolean;
 }
 
 export interface ProjectItemState {
@@ -51,12 +51,21 @@ export interface ProjectItemState {
   codex: ProjectCell;
 }
 
-/** 仓库里存在、但 CC Switch 不认识的条目（只报告，不动它） */
-export interface ForeignEntry {
-  kind: "mcp" | "skill";
-  app: ProjectScopeApp;
-  key: string;
-}
+/**
+ * 一次开关的结果。
+ *
+ * `conflict` 不是错误：目标位置已经有同名的东西，界面弹一次确认，用户点
+ * 「强制覆盖」就带 `force: true` 再调一次。
+ */
+export type ToggleOutcome =
+  | { status: "applied" }
+  | {
+      status: "conflict";
+      /** 冲突的键名 / 目录名 */
+      key: string;
+      /** 冲突落在仓库里的哪个文件或目录（相对路径） */
+      path: string;
+    };
 
 /** 会写到仓库里的文件/目录，界面上明示「这些会进版本库」 */
 export interface ProjectTargets {
@@ -72,7 +81,6 @@ export interface ProjectScopeState {
   mcp: ProjectItemState[];
   skills: ProjectItemState[];
   codexTrust: CodexTrust;
-  foreign: ForeignEntry[];
   targets: ProjectTargets;
 }
 
@@ -123,22 +131,38 @@ export const projectScopeApi = {
     return await invoke("get_project_scope_state", { projectId });
   },
 
+  /** `force` 为真才覆盖同名条目；为假时同名会返回 `status: "conflict"` */
   async toggleMcp(
     projectId: string,
     serverId: string,
     app: ProjectScopeApp,
     enabled: boolean,
-  ): Promise<void> {
-    await invoke("toggle_project_mcp", { projectId, serverId, app, enabled });
+    force = false,
+  ): Promise<ToggleOutcome> {
+    return await invoke("toggle_project_mcp", {
+      projectId,
+      serverId,
+      app,
+      enabled,
+      force,
+    });
   },
 
+  /** 强制覆盖 Skill 会**整个替换**仓库里那个目录 */
   async toggleSkill(
     projectId: string,
     skillId: string,
     app: ProjectScopeApp,
     enabled: boolean,
-  ): Promise<void> {
-    await invoke("toggle_project_skill", { projectId, skillId, app, enabled });
+    force = false,
+  ): Promise<ToggleOutcome> {
+    return await invoke("toggle_project_skill", {
+      projectId,
+      skillId,
+      app,
+      enabled,
+      force,
+    });
   },
 
   /** 按库里的绑定全量重投一次（修复手改或误删造成的漂移） */

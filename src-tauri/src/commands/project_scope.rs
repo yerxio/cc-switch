@@ -6,7 +6,7 @@
 use super::run_db_task;
 use crate::services::project_scope::{
     ProjectApp, ProjectCandidate, ProjectScopeService, ProjectScopeState, ResyncFailure,
-    ResyncReport, ScopedProject,
+    ResyncReport, ScopedProject, ToggleOutcome,
 };
 use crate::store::AppState;
 use tauri::State;
@@ -96,35 +96,43 @@ pub async fn get_project_scope_state(
     .await
 }
 
-/// 勾选/取消一个 MCP server 在某项目某应用下的绑定
+/// 勾选/取消一个 MCP server 在某项目某应用下的绑定。
+///
+/// 目标文件里已有同名键时返回 `{ status: "conflict", key, path }` 而不是报错，
+/// 界面问过用户后带 `force = true` 再调一次就覆盖。
 #[tauri::command]
 pub async fn toggle_project_mcp(
     project_id: String,
     server_id: String,
     app: String,
     enabled: bool,
+    force: bool,
     app_state: State<'_, AppState>,
-) -> Result<(), String> {
+) -> Result<ToggleOutcome, String> {
     let target = ProjectApp::parse(&app).map_err(|e| e.to_string())?;
     run_db_task(&app_state, move |state| {
-        ProjectScopeService::toggle_mcp(&state.db, &project_id, &server_id, target, enabled)
+        ProjectScopeService::toggle_mcp(&state.db, &project_id, &server_id, target, enabled, force)
             .map_err(|e| e.to_string())
     })
     .await
 }
 
-/// 勾选/取消一个 Skill 在某项目某应用下的绑定
+/// 勾选/取消一个 Skill 在某项目某应用下的绑定。
+///
+/// skills 目录下已有同名目录时返回 `{ status: "conflict", key, path }`；
+/// 强制覆盖会**整个替换**那个目录。
 #[tauri::command]
 pub async fn toggle_project_skill(
     project_id: String,
     skill_id: String,
     app: String,
     enabled: bool,
+    force: bool,
     app_state: State<'_, AppState>,
-) -> Result<(), String> {
+) -> Result<ToggleOutcome, String> {
     let target = ProjectApp::parse(&app).map_err(|e| e.to_string())?;
     run_db_task(&app_state, move |state| {
-        ProjectScopeService::toggle_skill(&state.db, &project_id, &skill_id, target, enabled)
+        ProjectScopeService::toggle_skill(&state.db, &project_id, &skill_id, target, enabled, force)
             .map_err(|e| e.to_string())
     })
     .await

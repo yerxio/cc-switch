@@ -71,12 +71,15 @@ export function useToggleProjectMcp() {
       serverId,
       app,
       enabled,
+      force,
     }: {
       projectId: string;
       serverId: string;
       app: ProjectScopeApp;
       enabled: boolean;
-    }) => projectScopeApi.toggleMcp(projectId, serverId, app, enabled),
+      /** 真 = 覆盖仓库里的同名条目 */
+      force?: boolean;
+    }) => projectScopeApi.toggleMcp(projectId, serverId, app, enabled, force),
     // 写文件失败时库里也可能已经改了，成败都要重读状态
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: PROJECT_SCOPE_KEY });
@@ -92,12 +95,15 @@ export function useToggleProjectSkill() {
       skillId,
       app,
       enabled,
+      force,
     }: {
       projectId: string;
       skillId: string;
       app: ProjectScopeApp;
       enabled: boolean;
-    }) => projectScopeApi.toggleSkill(projectId, skillId, app, enabled),
+      /** 真 = 整个替换仓库里的同名目录 */
+      force?: boolean;
+    }) => projectScopeApi.toggleSkill(projectId, skillId, app, enabled, force),
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: PROJECT_SCOPE_KEY });
     },
