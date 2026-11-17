@@ -395,7 +395,7 @@ Ausführliche Anleitungen zu allen Funktionen finden Sie im **[Benutzerhandbuch]
 
 - **Einheitliches MCP-Panel** — Alle MCP-Server an einer Stelle verwalten, pro Werkzeug per Häkchen synchronisieren (Claude Code, Codex, Gemini CLI, Grok Build, OpenCode, Hermes, Pi, MiniMax Code, Kimi Code, Oh My Pi), bestehende Konfigurationen aus den einzelnen Werkzeugen importieren, Import per Deep Link
 - **Prompts** — Je Werkzeug separat verwaltete Prompt-Bibliothek mit Markdown-Editor; nach dem Aktivieren wird der Prompt in die Prompt-Datei des Werkzeugs geschrieben (CLAUDE.md / AGENTS.md / GEMINI.md), wobei der bisherige Inhalt der Datei vorher in die Prompt-Bibliothek zurückgesichert wird und nicht verloren geht. Bei Pi lassen sich außerdem SYSTEM.md, APPEND_SYSTEM.md und Prompt-Vorlagen bearbeiten
-- **Skills** — skills.sh durchsuchen oder mit einem Klick aus GitHub-Repositorys bzw. ZIP-Dateien installieren; nach Updates suchen und alle mit einem Klick aktualisieren; die Synchronisierung in die einzelnen Werkzeuge erfolgt wahlweise automatisch, nur per Symlink oder nur per Kopie, als Speicherort ist optional `~/.agents/skills` wählbar
+- **Skills** — skills.sh durchsuchen oder mit einem Klick aus GitHub-Repositorys bzw. ZIP-Dateien installieren; nach Updates suchen und alle mit einem Klick aktualisieren; die Synchronisierung in die einzelnen Werkzeuge erfolgt wahlweise automatisch, nur per Symlink oder nur per Kopie, als Speicherort ist optional `~/.agents/skills` wählbar; in Ordner einsortieren (einen ganzen Ordner mit einem Klick aktivieren oder deaktivieren) und als ZIP exportieren, das die Ordner beibehält
 - Alle drei Panels unterstützen die Suche; bei MCP und Skills können Sie zudem pro Werkzeug alle Einträge mit einem Klick aktivieren oder deaktivieren. Anbieter, MCP und Prompts werden ganzseitig im Inhaltsbereich bearbeitet; wenn Sie die Seite mit ungespeicherten Änderungen verlassen, werden Sie vorher gewarnt
 
 ### Nutzungs- & Kostenverfolgung
@@ -537,6 +537,31 @@ Standardmäßig liegen alle Daten im Ordner `.cc-switch` in Ihrem Benutzerverzei
 - **Original-Konfigurationsdateien**: `backups/live-first-write/` (die Konfigurationsdateien der Werkzeuge, bevor CC Switch sie zum ersten Mal umgeschrieben hat)
 
 Wenn Sie unter „Optionen → Daten → Speicherort“ das „CC-Switch-Konfigurationsverzeichnis“ ändern, werden alle oben genannten Dateien außer `settings.json`, dem Gerätezustand und den Original-Konfigurationsdateien im neuen Verzeichnis abgelegt. CC Switch verschiebt vorhandene Dateien nicht automatisch; kopieren Sie sie vorher manuell dorthin. `settings.json`, der Gerätezustand und die Original-Konfigurationsdateien gehören nur zu diesem Rechner: Sie bleiben immer im Standardverzeichnis und werden nicht per Cloud synchronisiert.
+
+</details>
+
+<details>
+<summary><strong>Welches Format braucht ein Skill-ZIP?</strong></summary>
+
+Jedes Verzeichnis im ZIP, das eine `SKILL.md` enthält, ist ein Skill und heißt wie das Verzeichnis. Um Ordner mitzugeben, fügen Sie eine weitere Verzeichnisebene hinzu:
+
+```
+my-skills.zip
+├── cc-switch-skills.json     # optionales Manifest
+├── solo-skill/               # im Stammverzeichnis → ohne Ordner
+│   └── SKILL.md
+└── Web/                      # übergeordnetes Verzeichnis → Ordner „Web“
+    ├── xss-testing/
+    │   └── SKILL.md
+    └── sqli-testing/
+        └── SKILL.md
+```
+
+- Das **direkt übergeordnete Verzeichnis** eines Skills wird sein Ordner; ein Skill direkt im Stammverzeichnis erhält keinen. Ordner haben nur eine Ebene, bei tieferer Verschachtelung zählt also nur die Ebene, die dem Skill am nächsten liegt.
+- Liegen alle Skills unter demselben einzigen Verzeichnis der obersten Ebene, gilt diese Ebene als Verpackung (etwa das `repo-main/` eines GitHub-Downloads) und nicht als Ordner.
+- Das Manifest `cc-switch-skills.json` enthält `{"version": 1, "folders": {"<skill-dir>": "<folder name>"}}`. Ist es vorhanden, hat es Vorrang; CC Switch schreibt es beim Export, und es stellt auch Ordnernamen mit Zeichen wieder her, die ein Verzeichnisname nicht enthalten kann, etwa `/` oder `:`.
+- Ordner sind nur eine Gruppierung innerhalb von CC Switch: Jedes Werkzeug lädt das flache `<skills>/<name>/SKILL.md`, daher entsteht unter `~/.claude/skills` und Ähnlichem nie ein verschachteltes Verzeichnis.
+- Die Installation aus einem ZIP importiert nur in CC Switch und aktiviert nichts; Skills, deren Verzeichnisname bereits vergeben ist, werden übersprungen.
 
 </details>
 

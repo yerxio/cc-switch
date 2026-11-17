@@ -395,7 +395,7 @@ paru -S cc-switch-bin
 
 - **統一的 MCP 面板** — 在同一處管理所有 MCP 伺服器，選擇每個伺服器要同步到哪些工具（Claude Code、Codex、Gemini CLI、Grok Build、OpenCode、Hermes、Pi、MiniMax Code、Kimi Code、Oh My Pi），從各工具匯入現有設定，並可透過 Deep Link 匯入
 - **提示詞** — 依工具分別建立的提示詞庫，附 Markdown 編輯器；啟用提示詞時會將其寫入該工具的提示詞檔案（CLAUDE.md / AGENTS.md / GEMINI.md），並先把檔案現有的內容存回提示詞庫，確保不會遺失任何內容。Pi 還可編輯 SYSTEM.md、APPEND_SYSTEM.md 與提示詞範本
-- **Skills** — 搜尋 skills.sh，或從 GitHub 儲存庫或 ZIP 檔案一鍵安裝；可檢查更新並一鍵全部更新；可自動同步到各工具、僅用符號連結，或僅用複本；也可選擇存放在 `~/.agents/skills`
+- **Skills** — 搜尋 skills.sh，或從 GitHub 儲存庫或 ZIP 檔案一鍵安裝；可檢查更新並一鍵全部更新；可自動同步到各工具、僅用符號連結，或僅用複本；也可選擇存放在 `~/.agents/skills`；可以用資料夾收納（按資料夾一鍵啟用 / 停用），並匯出為保留資料夾層級的 ZIP
 - 三個面板都支援搜尋，MCP 與 Skills 還可依工具一次全部啟用或停用；供應商、MCP 伺服器與提示詞都在內容區以整頁方式編輯，離開時若有未儲存的變更會先提醒你
 
 ### 用量與費用追蹤
@@ -537,6 +537,31 @@ CC Switch 遵循「最小侵入」的設計原則——即使你解除安裝本�
 - **原始設定檔**：`backups/live-first-write/`（CC Switch 第一次改寫之前各工具設定檔的原樣）
 
 在「設定 → 資料 → 儲存位置」中變更「CC Switch 設定目錄」後，除了 `settings.json`、裝置狀態與原始設定檔之外，上述所有檔案都會存放在新目錄中。CC Switch 不會自動搬移既有檔案，請先手動複製過去。`settings.json`、裝置狀態與原始設定檔只屬於這台電腦：它們一律保留在預設目錄，也不會納入雲端同步。
+
+</details>
+
+<details>
+<summary><strong>Skill 的 ZIP 檔要什麼格式？</strong></summary>
+
+ZIP 裡每個含 `SKILL.md` 的目錄就是一個 Skill，目錄名就是它的名字。要帶上資料夾層級，就多套一層目錄：
+
+```
+my-skills.zip
+├── cc-switch-skills.json     # 選用的清單
+├── solo-skill/               # 在根目錄 → 未分類
+│   └── SKILL.md
+└── Web/                      # 上一層目錄 → 資料夾「Web」
+    ├── xss-testing/
+    │   └── SKILL.md
+    └── sqli-testing/
+        └── SKILL.md
+```
+
+- Skill 的**直接上層目錄**會成為它的資料夾；直接放在根目錄的不進資料夾。資料夾只有一層，嵌得更深時只取最靠近 Skill 的那一層。
+- 所有 Skill 都在同一個頂層目錄下時，這一層會被當作打包的外殼（例如 GitHub 下載檔裡的 `repo-main/`），不算資料夾。
+- 清單 `cc-switch-skills.json` 的內容是 `{"version": 1, "folders": {"<skill-dir>": "<folder name>"}}`。有清單時以清單為準；CC Switch 匯出時會自動寫入，資料夾名稱裡有 `/`、`:` 這類不能當目錄名的字元時靠它原樣還原。
+- 資料夾只是 CC Switch 裡的分組：各工具只認扁平的 `<skills>/<名稱>/SKILL.md`，所以不會在 `~/.claude/skills` 之類的目錄裡產生巢狀目錄。
+- 從 ZIP 安裝只匯入到 CC Switch，不會自動在任何工具裡啟用；目錄名已被佔用的 Skill 會被跳過。
 
 </details>
 

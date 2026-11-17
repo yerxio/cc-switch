@@ -395,7 +395,7 @@ For detailed guides on every feature, check out the **[User Manual](docs/user-ma
 
 - **Unified MCP panel** — Manage all MCP servers in one place, choose which tools to sync each one to (Claude Code, Codex, Gemini CLI, Grok Build, OpenCode, Hermes, Pi, MiniMax Code, Kimi Code, Oh My Pi), import existing configs from each tool, and import via Deep Link
 - **Prompts** — A per-tool prompt library with a Markdown editor; enabling a prompt writes it to that tool's prompt file (CLAUDE.md / AGENTS.md / GEMINI.md), and the file's existing content is saved back to the library first, so nothing is lost. Pi can also edit SYSTEM.md, APPEND_SYSTEM.md, and prompt templates
-- **Skills** — Search skills.sh, or install in one click from GitHub repos or ZIP files; check for updates and update all in one click; sync to each tool automatically, via symlinks only, or via copies only; you can optionally store them in `~/.agents/skills`
+- **Skills** — Search skills.sh, or install in one click from GitHub repos or ZIP files; check for updates and update all in one click; sync to each tool automatically, via symlinks only, or via copies only; you can optionally store them in `~/.agents/skills`; organize them into folders (enable or disable a whole folder in one click) and export them as a ZIP that keeps the folders
 - All three panels support search, and MCP and Skills can also be enabled or disabled all at once per tool; providers, MCP servers, and prompts are edited full-page in the content area, and you're warned before leaving with unsaved changes
 
 ### Usage & Cost Tracking
@@ -537,6 +537,31 @@ By default, everything is stored in the `.cc-switch` folder in your home directo
 - **Original config files**: `backups/live-first-write/` (each tool's config file as it was before CC Switch first rewrote it)
 
 After you change "CC Switch Configuration Directory" in "Settings → Data → Location", all of the files above except `settings.json`, the device state, and the original config files are stored in the new directory. CC Switch doesn't move existing files automatically, so copy them over manually first. `settings.json`, the device state, and the original config files belong to this computer only: they always stay in the default directory and are not included in cloud sync.
+
+</details>
+
+<details>
+<summary><strong>What format does a Skill ZIP need?</strong></summary>
+
+Every directory in the ZIP that contains a `SKILL.md` is one Skill, named after the directory. To carry folders, add one more level of directories:
+
+```
+my-skills.zip
+├── cc-switch-skills.json     # optional manifest
+├── solo-skill/               # at the root → unfiled
+│   └── SKILL.md
+└── Web/                      # parent directory → folder "Web"
+    ├── xss-testing/
+    │   └── SKILL.md
+    └── sqli-testing/
+        └── SKILL.md
+```
+
+- A Skill's **immediate parent directory** becomes its folder; a Skill directly at the root gets none. Folders are one level deep, so with deeper nesting only the level closest to the Skill counts.
+- When every Skill sits under the same single top-level directory, that level is treated as packaging (the `repo-main/` in a GitHub download, for example) and not as a folder.
+- The manifest `cc-switch-skills.json` holds `{"version": 1, "folders": {"<skill-dir>": "<folder name>"}}`. When present it wins; CC Switch writes it on export, and it is what restores a folder name containing characters a directory name cannot hold, such as `/` or `:`.
+- Folders are only a grouping inside CC Switch: each tool loads the flat `<skills>/<name>/SKILL.md`, so no nested directory is ever created under `~/.claude/skills` and the like.
+- Installing from a ZIP only imports into CC Switch and enables nothing; Skills whose directory name is already taken are skipped.
 
 </details>
 

@@ -395,7 +395,7 @@ Sağlayıcı yönetimi, MCP/İstemler/Skills, yerel yönlendirme ve yük devri v
 
 - **Birleşik MCP paneli** — Tüm MCP sunucularını tek yerden yönetin, her birinin hangi araçlarla eşitleneceğini seçin (Claude Code, Codex, Gemini CLI, Grok Build, OpenCode, Hermes, Pi, MiniMax Code, Kimi Code, Oh My Pi), her aracın mevcut yapılandırmalarını içe aktarın ve Deep Link ile içe aktarın
 - **İstemler** — Markdown düzenleyicili, araç başına bir istem kitaplığı; bir istemi etkinleştirmek onu aracın istem dosyasına (CLAUDE.md / AGENTS.md / GEMINI.md) yazar ve dosyanın mevcut içeriği önce kitaplığa kaydedilir, böylece hiçbir şey kaybolmaz. Pi ayrıca SYSTEM.md, APPEND_SYSTEM.md ve istem şablonlarını düzenleyebilir
-- **Skills** — skills.sh'de arayın veya GitHub depolarından ya da ZIP dosyalarından tek tıkla kurun; güncellemeleri denetleyin ve tümünü tek tıkla güncelleyin; her araca otomatik olarak, yalnızca sembolik bağlarla veya yalnızca kopyalarla eşitleyin; isteğe bağlı olarak `~/.agents/skills` içinde saklayabilirsiniz
+- **Skills** — skills.sh'de arayın veya GitHub depolarından ya da ZIP dosyalarından tek tıkla kurun; güncellemeleri denetleyin ve tümünü tek tıkla güncelleyin; her araca otomatik olarak, yalnızca sembolik bağlarla veya yalnızca kopyalarla eşitleyin; isteğe bağlı olarak `~/.agents/skills` içinde saklayabilirsiniz; klasörlere ayırabilir (bir klasörün tamamını tek tıkla etkinleştirip devre dışı bırakabilir) ve klasörleri koruyan bir ZIP olarak dışa aktarabilirsiniz
 - Her üç panel de aramayı destekler; MCP ve Skills ayrıca araç başına tek seferde etkinleştirilip devre dışı bırakılabilir; sağlayıcılar, MCP sunucuları ve istemler içerik alanında tam sayfa düzenlenir ve kaydedilmemiş değişikliklerle ayrılmadan önce uyarılırsınız
 
 ### Kullanım ve Maliyet Takibi
@@ -537,6 +537,31 @@ Varsayılan olarak her şey ana dizininizdeki `.cc-switch` klasöründe saklanı
 - **Özgün yapılandırma dosyaları**: `backups/live-first-write/` (CC Switch'in ilk kez yeniden yazmasından önceki hâliyle her aracın yapılandırma dosyası)
 
 "Ayarlar → Veri → Konum"da "CC Switch Yapılandırma Dizini"ni değiştirdikten sonra, `settings.json`, cihaz durumu ve özgün yapılandırma dosyaları dışındaki yukarıdaki tüm dosyalar yeni dizinde saklanır. CC Switch mevcut dosyaları otomatik taşımaz, bu yüzden önce elle kopyalayın. `settings.json`, cihaz durumu ve özgün yapılandırma dosyaları yalnızca bu bilgisayara aittir: her zaman varsayılan dizinde kalır ve bulut eşitlemeye dahil edilmez.
+
+</details>
+
+<details>
+<summary><strong>Bir Beceri ZIP dosyası hangi biçimde olmalı?</strong></summary>
+
+ZIP içinde `SKILL.md` barındıran her dizin bir Beceridir ve adını dizinden alır. Klasörleri de taşımak için bir dizin düzeyi daha ekleyin:
+
+```
+my-skills.zip
+├── cc-switch-skills.json     # isteğe bağlı bildirim
+├── solo-skill/               # kökte → sınıflandırılmamış
+│   └── SKILL.md
+└── Web/                      # üst dizin → "Web" klasörü
+    ├── xss-testing/
+    │   └── SKILL.md
+    └── sqli-testing/
+        └── SKILL.md
+```
+
+- Bir Becerinin **hemen üstündeki dizin** onun klasörü olur; doğrudan kökte duran Beceri klasöre girmez. Klasörler tek düzeydir, daha derin iç içe yapılarda yalnızca Beceriye en yakın düzey sayılır.
+- Tüm Beceriler aynı tek üst düzey dizinin altındaysa, o düzey paketleme kabuğu (örneğin GitHub indirmesindeki `repo-main/`) sayılır ve klasör olarak kabul edilmez.
+- `cc-switch-skills.json` bildiriminin içeriği `{"version": 1, "folders": {"<skill-dir>": "<folder name>"}}` biçimindedir. Varsa o geçerlidir; CC Switch dışa aktarırken otomatik yazar ve `/` veya `:` gibi dizin adında kullanılamayan karakterler içeren klasör adlarını aynen geri getiren de odur.
+- Klasörler yalnızca CC Switch içindeki bir gruplamadır: her araç düz `<skills>/<ad>/SKILL.md` yolunu yükler, bu yüzden `~/.claude/skills` ve benzerlerinin altında asla iç içe dizin oluşturulmaz.
+- ZIP'ten yüklemek yalnızca CC Switch'e aktarır ve hiçbir araçta etkinleştirmez; dizin adı zaten kullanılan Beceriler atlanır.
 
 </details>
 

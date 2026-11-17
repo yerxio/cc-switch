@@ -395,7 +395,7 @@ paru -S cc-switch-bin
 
 - **통합 MCP 패널** — 모든 MCP 서버를 한곳에서 관리하고, 각각을 어떤 도구에 동기화할지 선택하며(Claude Code, Codex, Gemini CLI, Grok Build, OpenCode, Hermes, Pi, MiniMax Code, Kimi Code, Oh My Pi), 각 도구의 기존 설정을 가져오고, Deep Link로 가져올 수 있습니다
 - **프롬프트** — Markdown 편집기를 갖춘 도구별 프롬프트 라이브러리입니다. 프롬프트를 활성화하면 해당 도구의 프롬프트 파일(CLAUDE.md / AGENTS.md / GEMINI.md)에 기록되며, 파일의 기존 내용은 먼저 라이브러리에 저장되므로 아무것도 사라지지 않습니다. Pi는 SYSTEM.md, APPEND_SYSTEM.md, 프롬프트 템플릿도 편집할 수 있습니다
-- **Skills** — skills.sh를 검색하거나 GitHub 저장소 또는 ZIP 파일에서 원클릭으로 설치하고, 업데이트를 확인해 한 번에 모두 업데이트하세요. 각 도구에 자동으로, 심볼릭 링크로만, 또는 복사로만 동기화할 수 있으며, 원하면 `~/.agents/skills`에 저장할 수도 있습니다
+- **Skills** — skills.sh를 검색하거나 GitHub 저장소 또는 ZIP 파일에서 원클릭으로 설치하고, 업데이트를 확인해 한 번에 모두 업데이트하세요. 각 도구에 자동으로, 심볼릭 링크로만, 또는 복사로만 동기화할 수 있으며, 원하면 `~/.agents/skills`에 저장할 수도 있습니다. 폴더로 정리할 수 있고(폴더 단위로 한 번에 활성화 / 비활성화), 폴더 구조를 유지한 ZIP으로 내보낼 수 있습니다
 - 세 패널 모두 검색을 지원하고, MCP와 Skills는 도구별로 한 번에 모두 켜거나 끌 수도 있습니다. 공급자, MCP 서버, 프롬프트는 콘텐츠 영역에서 전체 페이지로 편집하며, 저장하지 않은 변경 사항이 있으면 나가기 전에 경고합니다
 
 ### 사용량 및 비용 추적
@@ -537,6 +537,31 @@ Codex의 경우 CC Switch 안에서 "Sign in with ChatGPT"로 여러 ChatGPT 계
 - **원본 설정 파일**: `backups/live-first-write/` (CC Switch가 처음 다시 쓰기 전의 각 도구 설정 파일)
 
 "설정 → 데이터 → 저장 위치"에서 "CC Switch 설정 디렉터리"를 바꾸면, `settings.json`, 기기 상태, 원본 설정 파일을 제외한 위의 모든 파일이 새 디렉터리에 저장됩니다. CC Switch는 기존 파일을 자동으로 옮기지 않으므로 먼저 직접 복사하세요. `settings.json`, 기기 상태, 원본 설정 파일은 이 컴퓨터에만 속하므로 항상 기본 디렉터리에 남고 클라우드 동기화에도 포함되지 않습니다.
+
+</details>
+
+<details>
+<summary><strong>스킬 ZIP은 어떤 형식이어야 하나요?</strong></summary>
+
+ZIP 안에서 `SKILL.md`가 들어 있는 디렉터리 하나가 스킬 하나이며, 디렉터리 이름이 곧 스킬 이름입니다. 폴더 구조를 담으려면 디렉터리를 한 단계 더 둡니다:
+
+```
+my-skills.zip
+├── cc-switch-skills.json     # 선택 사항인 매니페스트
+├── solo-skill/               # 루트 바로 아래 → 미분류
+│   └── SKILL.md
+└── Web/                      # 상위 디렉터리 → 폴더 "Web"
+    ├── xss-testing/
+    │   └── SKILL.md
+    └── sqli-testing/
+        └── SKILL.md
+```
+
+- 스킬의 **바로 위 디렉터리**가 그 스킬의 폴더가 됩니다. 루트 바로 아래에 있는 스킬은 폴더에 들어가지 않습니다. 폴더는 한 단계뿐이므로 더 깊게 중첩된 경우 스킬에 가장 가까운 단계만 사용됩니다.
+- 모든 스킬이 같은 하나의 최상위 디렉터리 아래에 있으면, 그 단계는 포장용 껍데기(GitHub 다운로드의 `repo-main/` 등)로 보고 폴더로 취급하지 않습니다.
+- 매니페스트 `cc-switch-skills.json`의 내용은 `{"version": 1, "folders": {"<skill-dir>": "<folder name>"}}` 입니다. 있으면 매니페스트가 우선합니다. CC Switch는 내보낼 때 자동으로 기록하며, `/`나 `:`처럼 디렉터리 이름에 쓸 수 없는 문자가 든 폴더 이름도 이것으로 그대로 복원됩니다.
+- 폴더는 CC Switch 안의 그룹일 뿐입니다. 각 도구는 평평한 `<skills>/<이름>/SKILL.md`만 불러오므로 `~/.claude/skills` 같은 곳에 중첩 디렉터리가 만들어지지 않습니다.
+- ZIP에서 설치하면 CC Switch로 가져오기만 하고 어떤 도구에서도 자동으로 활성화하지 않습니다. 디렉터리 이름이 이미 사용 중인 스킬은 건너뜁니다.
 
 </details>
 
