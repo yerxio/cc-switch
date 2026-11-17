@@ -50,6 +50,7 @@ const m = vi.hoisted(() => ({
   projectScopeState: undefined as Record<string, unknown> | undefined,
   selectScope: vi.fn(),
   toggleProjectSkill: vi.fn(),
+  bulkProjectSkills: vi.fn(),
   resyncProject: vi.fn(),
 }));
 
@@ -206,6 +207,10 @@ vi.mock("@/hooks/useProjectScope", () => ({
     mutateAsync: m.resyncProject,
     isPending: false,
   }),
+  useBulkToggleProjectSkills: () => ({
+    mutateAsync: m.bulkProjectSkills,
+    isPending: false,
+  }),
 }));
 
 type Overrides = Omit<Partial<InstalledSkill>, "apps"> & {
@@ -294,6 +299,9 @@ describe("UnifiedSkillsPanel", () => {
     m.scopeProjectId = null;
     m.projectScopeState = undefined;
     m.selectScope.mockReset();
+    m.bulkProjectSkills
+      .mockReset()
+      .mockResolvedValue({ applied: [], conflicts: [], failed: [] });
     m.toggleProjectSkill.mockReset().mockResolvedValue({ status: "applied" });
     m.resyncProject.mockReset().mockResolvedValue({ applied: 0, failures: [] });
     m.updateSkill
@@ -1523,6 +1531,161 @@ describe("UnifiedSkillsPanel", () => {
       m.installed = [makeSkill()];
       renderPanel();
       expect(document.querySelector("[data-folder-row]")).toBeNull();
+    });
+  });
+
+  describe("project scope", () => {
+    const project = {
+      id: "p1",
+      path: "/repos/api",
+      name: "api",
+      addedAt: 0,
+      exists: true,
+    };
+    const off = { bound: false, global: false, conflict: false };
+    const on = { bound: true, global: false, conflict: false };
+    const projectState = (skills: unknown[]) => ({
+      project,
+      mcp: [],
+      skills,
+      codexTrust: "trusted",
+      targets: {
+        claudeMcp: ".mcp.json",
+        claudeApproval: ".claude/settings.local.json",
+        claudeSkills: ".claude/skills/",
+        codexMcp: ".codex/config.toml",
+        codexSkills: ".agents/skills/",
+      },
+    });
+
+    it("shows no project picker while the scope is global", () => {
+      m.installed = [makeSkill()];
+      m.scopedProjects = [project];
+      m.scopeProjectId = null;
+      renderPanel();
+
+      // 全局作用域下没有「选哪个项目」这回事：只有切换器
+      expect(
+        screen.getByRole("button", { name: "projectScope.project" }),
+      ).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "api" })).toBeNull();
+      expect(
+        screen.queryByRole("button", { name: "projectScope.pickProject" }),
+      ).toBeNull();
+    });
+
+    it("shows the project picker once a project is selected", () => {
+      m.installed = [makeSkill()];
+      m.scopedProjects = [project];
+      m.scopeProjectId = "p1";
+      m.projectScopeState = projectState([]);
+      renderPanel();
+
+      expect(screen.getByRole("button", { name: "api" })).toBeInTheDocument();
+    });
+
+    it("returns to the last project when switching back from global", async () => {
+      const other = { ...project, id: "p2", name: "web", path: "/repos/web" };
+      m.installed = [makeSkill()];
+      m.scopedProjects = [project, other];
+      m.scopeProjectId = null;
+      window.localStorage.setItem("cc-switch:project-scope:last", "p2");
+      renderPanel();
+
+      await userEvent.click(
+        screen.getByRole("button", { name: "projectScope.project" }),
+      );
+      // 回到上次的 p2，而不是列表里的第一个
+      expect(m.selectScope).toHaveBeenCalledWith("p2");
+    });
+
+    it("groups the project's Skills by the same folders as the global list", () => {
+      m.scopedProjects = [project];
+      m.scopeProjectId = "p1";
+      m.folderState = {
+        folders: [{ id: "f-web", name: "Web", sortOrder: 0 }],
+        assignments: { "local:a": "f-web", "local:b": "f-web" },
+      };
+      m.projectScopeState = projectState([
+        { id: "local:a", name: "A", claude: off, codex: off },
+        { id: "local:b", name: "B", claude: on, codex: off },
+        { id: "local:c", name: "C", claude: off, codex: off },
+      ]);
+      renderPanel();
+
+      const folderRows = Array.from(
+        document.querySelectorAll("[data-folder-row]"),
+      ).map((row) => row.getAttribute("data-folder-row"));
+      expect(folderRows).toEqual(["Web", "skillFolders.unfiled"]);
+    });
+
+    it("writes the rest of a folder into the project from the folder row", async () => {
+      m.scopedProjects = [project];
+      m.scopeProjectId = "p1";
+      m.folderState = {
+        folders: [{ id: "f-web", name: "Web", sortOrder: 0 }],
+        assignments: { "local:a": "f-web", "local:b": "f-web" },
+      };
+      m.projectScopeState = projectState([
+        { id: "local:a", name: "A", claude: off, codex: off },
+        { id: "local:b", name: "B", claude: on, codex: off },
+        { id: "local:c", name: "C", claude: off, codex: off },
+      ]);
+      m.bulkProjectSkills.mockResolvedValueOnce({
+        applied: ["local:a"],
+        conflicts: [],
+        failed: [],
+      });
+      renderPanel();
+
+      // Web 在 Claude 下是「部分写入」（B 已写、A 没写）：点一下只补 A
+      await userEvent.click(
+        screen.getByRole("button", { name: /projectScope.folderCell.some/ }),
+      );
+      await waitFor(() =>
+        expect(m.bulkProjectSkills).toHaveBeenCalledWith({
+          projectId: "p1",
+          skillIds: ["local:a"],
+          app: "claude",
+          enabled: true,
+        }),
+      );
+      // 走的是批量，不是逐条的那个 mutation
+      expect(m.toggleProjectSkill).not.toHaveBeenCalled();
+    });
+
+    it("reports Skills skipped for a name clash instead of overwriting them in bulk", async () => {
+      m.scopedProjects = [project];
+      m.scopeProjectId = "p1";
+      m.folderState = {
+        folders: [{ id: "f-web", name: "Web", sortOrder: 0 }],
+        assignments: { "local:a": "f-web" },
+      };
+      m.projectScopeState = projectState([
+        { id: "local:a", name: "A", claude: off, codex: off },
+      ]);
+      m.bulkProjectSkills.mockResolvedValueOnce({
+        applied: [],
+        conflicts: ["local:a"],
+        failed: [],
+      });
+      renderPanel();
+
+      await userEvent.click(
+        screen.getAllByRole("button", {
+          name: /projectScope.folderCell.none/,
+        })[0],
+      );
+      await waitFor(() =>
+        expect(m.toastWarning).toHaveBeenCalledWith(
+          "projectScope.folderBulk.enabled",
+          expect.objectContaining({
+            description: expect.stringContaining(
+              "projectScope.folderBulk.conflicts",
+            ),
+          }),
+        ),
+      );
     });
   });
 });

@@ -5463,6 +5463,17 @@
     "filesNoticeMcp": "Claude Code 写 {{claude}}（并在 {{approval}} 里预批准，省掉审批弹窗）；Codex 写 {{codex}}。两者都是在现有文件上增删自己那几条，你写的其他 MCP 和设置不会被动。按各自的约定，这些文件通常是要提交进版本库、和队友共享的。",
     "filesNoticeSkills": "Claude Code 写 {{claude}}，Codex 写 {{codex}}。项目级固定用复制而不是符号链接——符号链接带的是本机绝对路径，提交后对队友是坏链。",
     "filesNoticeTitle": "这些文件会写进你的仓库",
+    "folderBulk": {
+      "enabled": "已为 {{app}} 写入 {{count}} 个 Skill 到这个项目",
+      "disabled": "已从这个项目撤掉 {{app}} 的 {{count}} 个 Skill",
+      "conflicts": "{{count}} 个因仓库里已有同名目录被跳过，要覆盖请逐个点它的格子确认。",
+      "failed": "{{count}} 个失败：{{error}}"
+    },
+    "folderCell": {
+      "all": "{{name}} · {{app}}：全部已写入这个项目，点一下全部撤掉",
+      "some": "{{name}} · {{app}}：部分已写入这个项目，点一下把剩下的都写入",
+      "none": "{{name}} · {{app}}：都没写入这个项目，点一下全部写入"
+    },
     "global": "全局",
     "help": "全局写的是各工具自己的用户级配置，对所有项目生效。项目级只写你选中的那个仓库里的文件，不碰任何全局配置。项目由你自己添加目录，不会自动发现。第一版支持 Claude Code 与 Codex CLI。",
     "helpTitle": "项目级和全局有什么区别",

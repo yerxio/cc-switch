@@ -5463,6 +5463,17 @@
     "filesNoticeMcp": "Claude Code {{claude}} dosyasına yazar ve onay penceresi çıkmasın diye {{approval}} içinde önceden onaylar; Codex {{codex}} dosyasına yazar. İkisi de mevcut dosyada yalnızca kendi kayıtlarını ekler ve çıkarır; yazdığınız diğer MCP sunucuları ve ayarlar dokunulmaz kalır. Her aracın kendi geleneğinde bu dosyalar sürüm kontrolüne işlenip ekiple paylaşılmak üzere tasarlanmıştır.",
     "filesNoticeSkills": "Claude Code {{claude}}, Codex {{codex}} kullanır. Proje kapsamı her zaman kopyalar, sembolik bağ kullanmaz: bağ bu makinedeki mutlak yolu taşır ve işlendiğinde başkaları için kırık bir bağ olur.",
     "filesNoticeTitle": "Bu dosyalar deponuza yazılır",
+    "folderBulk": {
+      "enabled": "{{app}} için {{count}} Beceri bu projeye yazıldı",
+      "disabled": "{{app}} uygulamasının {{count}} Becerisi bu projeden kaldırıldı",
+      "conflicts": "{{count}} tanesi depoda aynı adlı dizin olduğu için atlandı; üzerine yazmak için her birinin hücresine tıklayıp onaylayın.",
+      "failed": "{{count}} başarısız: {{error}}"
+    },
+    "folderCell": {
+      "all": "{{name}} · {{app}}: tümü bu projeye yazıldı — tümünü kaldırmak için tıklayın",
+      "some": "{{name}} · {{app}}: bazıları bu projeye yazıldı — kalanını yazmak için tıklayın",
+      "none": "{{name}} · {{app}}: bu projeye hiçbiri yazılmadı — tümünü yazmak için tıklayın"
+    },
     "global": "Genel",
     "help": "Genel kapsam her aracın kendi kullanıcı düzeyi yapılandırmasına yazar ve tüm projelerde geçerlidir. Proje kapsamı yalnızca seçtiğiniz depo içine yazar ve hiçbir genel yapılandırmaya dokunmaz. Projeleri bir dizin seçerek kendiniz eklersiniz; hiçbir şey sizin için keşfedilmez. Bu ilk sürüm Claude Code ve Codex CLI'yi destekler.",
     "helpTitle": "Proje kapsamı ile genel arasındaki fark",

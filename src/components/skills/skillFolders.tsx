@@ -32,17 +32,17 @@ export const UNFILED_KEY = "__unfiled__";
 /** 文件夹行比 Skill 行矮一截：它是分组标题，不是条目 */
 export const FOLDER_ROW_HEIGHT = 40;
 
-export type SkillDisplayRow =
+export type SkillDisplayRow<T extends { id: string } = InstalledSkill> =
   | {
       kind: "folder";
       /** 文件夹 id，或 [`UNFILED_KEY`] */
       key: string;
       /** `null` = 「未分类」 */
       folder: SkillFolder | null;
-      skills: InstalledSkill[];
+      skills: T[];
       collapsed: boolean;
     }
-  | { kind: "skill"; key: string; skill: InstalledSkill };
+  | { kind: "skill"; key: string; skill: T };
 
 /**
  * 把（已经过搜索 / 筛选的）Skill 列表排成「文件夹行 + 条目行」。
@@ -50,20 +50,22 @@ export type SkillDisplayRow =
  * 一个文件夹都没有时原样返回扁平列表：没用上这个功能的人看到的界面和以前一样。
  * 有搜索 / 筛选时，没有命中项的文件夹不显示，免得一排空标题。
  */
-export function buildSkillDisplayRows(
-  skills: InstalledSkill[],
+export function buildSkillDisplayRows<
+  T extends { id: string } = InstalledSkill,
+>(
+  skills: T[],
   folders: SkillFolder[],
   assignments: Record<string, string>,
   collapsed: ReadonlySet<string>,
   narrowed: boolean,
-): SkillDisplayRow[] {
+): SkillDisplayRow<T>[] {
   if (folders.length === 0) {
     return skills.map((skill) => ({ kind: "skill", key: skill.id, skill }));
   }
 
   const known = new Set(folders.map((folder) => folder.id));
-  const byFolder = new Map<string, InstalledSkill[]>();
-  const unfiled: InstalledSkill[] = [];
+  const byFolder = new Map<string, T[]>();
+  const unfiled: T[] = [];
   for (const skill of skills) {
     const folderId = assignments[skill.id];
     if (folderId && known.has(folderId)) {
@@ -75,12 +77,8 @@ export function buildSkillDisplayRows(
     }
   }
 
-  const rows: SkillDisplayRow[] = [];
-  const pushGroup = (
-    key: string,
-    folder: SkillFolder | null,
-    members: InstalledSkill[],
-  ) => {
+  const rows: SkillDisplayRow<T>[] = [];
+  const pushGroup = (key: string, folder: SkillFolder | null, members: T[]) => {
     const isCollapsed = collapsed.has(key);
     rows.push({
       kind: "folder",

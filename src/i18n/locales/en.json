@@ -5463,6 +5463,17 @@
     "filesNoticeMcp": "Claude Code uses {{claude}} and pre-approves the server in {{approval}} so no prompt appears; Codex uses {{codex}}. Both only add and remove their own entries in the existing file — the other MCP servers and settings you wrote stay untouched. By each tool's own convention these files are meant to be committed and shared with your team.",
     "filesNoticeSkills": "Claude Code uses {{claude}} and Codex uses {{codex}}. Project scope always copies instead of symlinking: a symlink carries an absolute path on this machine and is a broken link for everyone else once committed.",
     "filesNoticeTitle": "These files are written into your repository",
+    "folderBulk": {
+      "enabled": "Wrote {{count}} Skills into this project for {{app}}",
+      "disabled": "Removed {{count}} of {{app}}'s Skills from this project",
+      "conflicts": "{{count}} skipped because the repository already has a directory by that name; click each one's cell to confirm overwriting.",
+      "failed": "{{count}} failed: {{error}}"
+    },
+    "folderCell": {
+      "all": "{{name}} · {{app}}: all written into this project — click to remove all",
+      "some": "{{name}} · {{app}}: some written into this project — click to write the rest",
+      "none": "{{name}} · {{app}}: none written into this project — click to write all"
+    },
     "global": "Global",
     "help": "Global writes each tool's own user-level config and applies to every project. Project scope writes only inside the repository you pick and touches no global config. You add projects by choosing a directory; nothing is discovered for you. This first version supports Claude Code and Codex CLI.",
     "helpTitle": "How project scope differs from global",

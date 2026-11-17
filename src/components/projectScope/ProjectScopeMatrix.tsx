@@ -1,6 +1,6 @@
 import * as React from "react";
 import { useTranslation } from "react-i18next";
-import { RefreshCw } from "lucide-react";
+import { ChevronDown, ChevronRight, Folder, RefreshCw } from "lucide-react";
 import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/button";
 import { Notice, NoticeSlot } from "@/components/ui/notice";
@@ -14,11 +14,17 @@ import {
 } from "@/components/mcp/AppMatrix";
 import { cn } from "@/lib/utils";
 import {
+  useBulkToggleProjectSkills,
   useProjectScopeState,
   useResyncProjectScope,
   useToggleProjectMcp,
   useToggleProjectSkill,
 } from "@/hooks/useProjectScope";
+import { useCollapsedFolders, useSkillFolders } from "@/hooks/useSkillFolders";
+import {
+  buildSkillDisplayRows,
+  type FolderAppState,
+} from "@/components/skills/skillFolders";
 import type {
   ProjectCell,
   ProjectItemState,
@@ -36,6 +42,25 @@ function cellState(cell: ProjectCell): MatrixCellState {
   if (cell.global) return "inherited";
   return "off";
 }
+
+/** 文件夹在这个项目某应用下的整体绑定状态 */
+function folderBindState(
+  members: ProjectItemState[],
+  app: ProjectScopeApp,
+): FolderAppState {
+  if (members.length === 0) return "none";
+  const bound = members.filter((row) =>
+    app === "claude" ? row.claude.bound : row.codex.bound,
+  ).length;
+  if (bound === 0) return "none";
+  return bound === members.length ? "all" : "some";
+}
+
+const FOLDER_CELL_STATE: Record<FolderAppState, MatrixCellState> = {
+  all: "on",
+  some: "inherited",
+  none: "off",
+};
 
 /** 等用户确认的同名冲突 */
 interface PendingConflict {
@@ -73,6 +98,12 @@ export function ProjectScopeMatrix({
   const toggleMcp = useToggleProjectMcp();
   const toggleSkill = useToggleProjectSkill();
   const resync = useResyncProjectScope();
+  const bulkSkills = useBulkToggleProjectSkills();
+  // 和全局面板是同一套文件夹、同一份折叠状态：文件夹是 Skill 的收纳方式，
+  // 不分作用域。MCP 没有文件夹。
+  const { data: folderState } = useSkillFolders();
+  const { collapsed: collapsedFolders, toggle: toggleFolder } =
+    useCollapsedFolders();
   const [search, setSearch] = React.useState("");
   const [conflict, setConflict] = React.useState<PendingConflict | null>(null);
 
@@ -80,6 +111,7 @@ export function ProjectScopeMatrix({
     disabled ||
     toggleMcp.isPending ||
     toggleSkill.isPending ||
+    bulkSkills.isPending ||
     resync.isPending;
 
   const rows: ProjectItemState[] = React.useMemo(() => {
@@ -148,6 +180,73 @@ export function ProjectScopeMatrix({
     } catch (toggleError) {
       toast.error(t("projectScope.toggleFailed", { name: row.name }), {
         description: String(toggleError),
+      });
+    }
+  };
+
+  const displayRows = React.useMemo(
+    () =>
+      buildSkillDisplayRows(
+        visibleRows,
+        kind === "skill" ? (folderState?.folders ?? []) : [],
+        folderState?.assignments ?? {},
+        collapsedFolders,
+        Boolean(query),
+      ),
+    [visibleRows, kind, folderState, collapsedFolders, query],
+  );
+
+  /** 文件夹行上的格子：把整个文件夹在这个项目里统一绑定 / 解绑 */
+  const handleFolderToggle = async (
+    members: ProjectItemState[],
+    app: ProjectScopeApp,
+    enable: boolean,
+  ) => {
+    const skillIds = members
+      .filter(
+        (row) =>
+          (app === "claude" ? row.claude.bound : row.codex.bound) !== enable,
+      )
+      .map((row) => row.id);
+    if (skillIds.length === 0) return;
+    try {
+      const result = await bulkSkills.mutateAsync({
+        projectId,
+        skillIds,
+        app,
+        enabled: enable,
+      });
+      const notes: string[] = [];
+      if (result.conflicts.length > 0) {
+        notes.push(
+          t("projectScope.folderBulk.conflicts", {
+            count: result.conflicts.length,
+          }),
+        );
+      }
+      if (result.failed.length > 0) {
+        notes.push(
+          t("projectScope.folderBulk.failed", {
+            count: result.failed.length,
+            error: result.failed[0].error,
+          }),
+        );
+      }
+      const text = t(
+        enable
+          ? "projectScope.folderBulk.enabled"
+          : "projectScope.folderBulk.disabled",
+        { count: result.applied.length, app: APP_DISPLAY_NAME[app] },
+      );
+      const options = {
+        description: notes.length > 0 ? notes.join(" ") : undefined,
+        closeButton: true,
+      };
+      if (notes.length > 0) toast.warning(text, options);
+      else toast.success(text, options);
+    } catch (bulkError) {
+      toast.error(t("projectScope.resyncFailed"), {
+        description: String(bulkError),
       });
     }
   };
@@ -292,42 +391,106 @@ export function ProjectScopeMatrix({
               ))}
             </div>
 
-            {visibleRows.map((row) => (
-              <div
-                key={row.id}
-                className="flex h-11 items-center gap-3 border-b border-border-subtle px-1"
-              >
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-body">{row.name}</span>
-                  <span className="block truncate text-caption text-fg-2">
-                    {row.id}
-                  </span>
-                </span>
-                {COLUMNS.map((app) => {
-                  const cell = app === "claude" ? row.claude : row.codex;
-                  const state_ = cellState(cell);
-                  return (
-                    <MatrixCell
-                      key={app}
-                      app={app}
-                      state={state_}
-                      disabled={busy}
-                      label={t(
-                        state_ === "on"
-                          ? "projectScope.cellBound"
-                          : state_ === "inherited"
-                            ? "projectScope.cellInherited"
-                            : state_ === "fail"
-                              ? "projectScope.cellConflict"
-                              : "projectScope.cellOff",
-                        { name: row.name, app: APP_DISPLAY_NAME[app] },
+            {displayRows.map((entry) => {
+              if (entry.kind === "folder") {
+                const name = entry.folder?.name ?? t("skillFolders.unfiled");
+                const Chevron = entry.collapsed ? ChevronRight : ChevronDown;
+                return (
+                  <div
+                    key={`folder:${entry.key}`}
+                    data-folder-row={name}
+                    className="flex h-9 items-center gap-3 border-b border-border-subtle bg-subtle px-1"
+                  >
+                    <button
+                      type="button"
+                      aria-expanded={!entry.collapsed}
+                      aria-label={t(
+                        entry.collapsed
+                          ? "skillFolders.expandAria"
+                          : "skillFolders.collapseAria",
+                        { name },
                       )}
-                      onClick={() => void handleToggle(row, app, cell)}
-                    />
-                  );
-                })}
-              </div>
-            ))}
+                      onClick={() => toggleFolder(entry.key)}
+                      className="flex min-w-0 flex-1 items-center gap-1.5 rounded-control py-1 text-start outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      <Chevron
+                        className="h-4 w-4 shrink-0 text-fg-2"
+                        strokeWidth={2}
+                      />
+                      <Folder
+                        className="h-4 w-4 shrink-0 text-fg-2"
+                        strokeWidth={1.75}
+                      />
+                      <span className="min-w-0 truncate text-body font-medium">
+                        {name}
+                      </span>
+                      <span className="shrink-0 text-caption tabular-nums text-fg-2">
+                        {entry.skills.length}
+                      </span>
+                    </button>
+                    {COLUMNS.map((app) => {
+                      const folderState_ = folderBindState(entry.skills, app);
+                      return (
+                        <MatrixCell
+                          key={app}
+                          app={app}
+                          state={FOLDER_CELL_STATE[folderState_]}
+                          disabled={busy || entry.skills.length === 0}
+                          label={t(`projectScope.folderCell.${folderState_}`, {
+                            name,
+                            app: APP_DISPLAY_NAME[app],
+                          })}
+                          onClick={() =>
+                            void handleFolderToggle(
+                              entry.skills,
+                              app,
+                              folderState_ !== "all",
+                            )
+                          }
+                        />
+                      );
+                    })}
+                  </div>
+                );
+              }
+              const row = entry.skill;
+              return (
+                <div
+                  key={row.id}
+                  className="flex h-11 items-center gap-3 border-b border-border-subtle px-1"
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-body">{row.name}</span>
+                    <span className="block truncate text-caption text-fg-2">
+                      {row.id}
+                    </span>
+                  </span>
+                  {COLUMNS.map((app) => {
+                    const cell = app === "claude" ? row.claude : row.codex;
+                    const state_ = cellState(cell);
+                    return (
+                      <MatrixCell
+                        key={app}
+                        app={app}
+                        state={state_}
+                        disabled={busy}
+                        label={t(
+                          state_ === "on"
+                            ? "projectScope.cellBound"
+                            : state_ === "inherited"
+                              ? "projectScope.cellInherited"
+                              : state_ === "fail"
+                                ? "projectScope.cellConflict"
+                                : "projectScope.cellOff",
+                          { name: row.name, app: APP_DISPLAY_NAME[app] },
+                        )}
+                        onClick={() => void handleToggle(row, app, cell)}
+                      />
+                    );
+                  })}
+                </div>
+              );
+            })}
           </div>
         </MatrixColumnHighlight>
       )}
