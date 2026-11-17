@@ -4803,6 +4803,7 @@
       "copiedOne": "{{id}}, JSON olarak kopyalandı (env ve başlık değerleri dahil)",
       "deleted": "Silinmiş {{id}}",
       "added": "{{id}} eklendi",
+      "addedHint": "Henüz hiçbir uygulamaya yazılmadı. Listeden yazılacak uygulamaları işaretleyin.",
       "saved": "{{id}} kaydedildi",
       "batchAdded": "{{count}} MCP sunucuları eklendi",
       "batchAddedReplaced": "{{count}} MCP sunucuları eklendi, {{replaced}}'nin yerini aldı",

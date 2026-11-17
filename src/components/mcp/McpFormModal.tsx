@@ -143,9 +143,9 @@ const McpFormModal: React.FC<McpFormModalProps> = ({
   const [conn, setConn] = useState<McpDraftConnection>(() =>
     connectionOf(initialData?.server ?? { type: "stdio" }),
   );
-  const [apps, setApps] = useState<AppsState>(() =>
-    appsOf(initialData, visibleAppIds),
-  );
+  // 新建时一个应用都不勾：添加只是把服务器收进 CC Switch，写进哪些应用回到列表的
+  // 矩阵里逐个决定（和「从 ZIP 安装 Skill」一致）。编辑时照旧带出现有的勾选。
+  const [apps, setApps] = useState<AppsState>(() => appsOf(initialData, []));
   const [meta, setMeta] = useState<MetaDraft>(() => metaOf(initialData));
   const [metaOpen, setMetaOpen] = useState(false);
   const [tab, setTab] = useState<"form" | "json">("form");
@@ -345,9 +345,12 @@ const McpFormModal: React.FC<McpFormModalProps> = ({
     // 只用「写入到」里能看到的勾选覆盖原值：隐藏只影响界面，覆盖已有服务器时隐藏
     // 应用的开关原样带回，否则会被当成关掉、从那些应用的配置里删掉；不支持 MCP 的
     // 应用（OpenClaw 等）沿用原值，新建时为 false
-    const visibleApps = Object.fromEntries(
-      visibleAppIds.map((app) => [app, apps[app]]),
-    );
+    // 添加模式下没有「写入到」，表单里的勾选全是没人碰过的 false——拿它去覆盖，
+    // 批量粘贴覆盖已有服务器时会把它在各应用里全部关掉。所以添加时不覆盖：
+    // 新条目全关，被覆盖的已有条目保持原来的启用状态。
+    const visibleApps = isEdit
+      ? Object.fromEntries(visibleAppIds.map((app) => [app, apps[app]]))
+      : {};
     const entry: McpServer = {
       ...(base ? { ...base } : {}),
       id,
@@ -469,7 +472,11 @@ const McpFormModal: React.FC<McpFormModalProps> = ({
         isEdit
           ? t("mcpPage.toast.saved", { id })
           : t("mcpPage.toast.added", { id }),
-        { closeButton: true },
+        {
+          // 新加的还没写进任何应用，得让人知道下一步去哪勾
+          description: isEdit ? undefined : t("mcpPage.toast.addedHint"),
+          closeButton: true,
+        },
       );
       await onSave();
     } catch (error) {
@@ -1207,66 +1214,69 @@ const McpFormModal: React.FC<McpFormModalProps> = ({
             </>
           )}
 
-          <div
-            role="group"
-            aria-labelledby="mcp-apps-label"
-            className="flex min-w-0 flex-col gap-2"
-          >
-            <div className="flex items-center gap-0.5">
-              <span id="mcp-apps-label" className={LABEL_CLASS}>
-                {t("mcpPage.drawer.writeTo")}
-              </span>
-              <HelpTip title={t("mcpPage.drawer.writeToHelpTitle")}>
-                {t("mcpPage.drawer.writeToHelp")}
-              </HelpTip>
-            </div>
-            <div className="grid grid-cols-2 gap-x-4 gap-y-2">
-              {visibleAppIds.map((app) => (
-                <label
-                  key={app}
-                  className="flex h-6 cursor-pointer items-center gap-2 text-body"
+          {/* 「写入到」只在编辑时出现：添加只入库，启用哪些应用在列表的矩阵里勾 */}
+          {isEdit && (
+            <div
+              role="group"
+              aria-labelledby="mcp-apps-label"
+              className="flex min-w-0 flex-col gap-2"
+            >
+              <div className="flex items-center gap-0.5">
+                <span id="mcp-apps-label" className={LABEL_CLASS}>
+                  {t("mcpPage.drawer.writeTo")}
+                </span>
+                <HelpTip title={t("mcpPage.drawer.writeToHelpTitle")}>
+                  {t("mcpPage.drawer.writeToHelp")}
+                </HelpTip>
+              </div>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+                {visibleAppIds.map((app) => (
+                  <label
+                    key={app}
+                    className="flex h-6 cursor-pointer items-center gap-2 text-body"
+                  >
+                    <input
+                      type="checkbox"
+                      className={CHECKBOX_CLASS}
+                      checked={apps[app]}
+                      onChange={(event) =>
+                        setApps((prev) => ({
+                          ...prev,
+                          [app]: event.target.checked,
+                        }))
+                      }
+                    />
+                    <AppGlyph app={app} size={16} badgeClassName="bg-surface" />
+                    <span className="whitespace-nowrap">
+                      {APP_DISPLAY_NAME[app]}
+                    </span>
+                  </label>
+                ))}
+              </div>
+              {sseAsHttpApps.length > 0 && (
+                <Notice
+                  tone="warning"
+                  title={t("mcpPage.drawer.sseAsHttpTitle", {
+                    apps: appNames(sseAsHttpApps),
+                  })}
                 >
-                  <input
-                    type="checkbox"
-                    className={CHECKBOX_CLASS}
-                    checked={apps[app]}
-                    onChange={(event) =>
-                      setApps((prev) => ({
-                        ...prev,
-                        [app]: event.target.checked,
-                      }))
-                    }
-                  />
-                  <AppGlyph app={app} size={16} badgeClassName="bg-surface" />
-                  <span className="whitespace-nowrap">
-                    {APP_DISPLAY_NAME[app]}
-                  </span>
-                </label>
-              ))}
+                  {t("mcpPage.drawer.sseAsHttpBody", {
+                    apps: appNames(sseAsHttpApps),
+                  })}
+                </Notice>
+              )}
+              {sseRejectedApps.length > 0 && (
+                <Notice
+                  tone="warning"
+                  title={t("mcpPage.drawer.sseRejectedTitle", {
+                    apps: appNames(sseRejectedApps),
+                  })}
+                >
+                  {t("mcpPage.drawer.sseRejectedBody")}
+                </Notice>
+              )}
             </div>
-            {sseAsHttpApps.length > 0 && (
-              <Notice
-                tone="warning"
-                title={t("mcpPage.drawer.sseAsHttpTitle", {
-                  apps: appNames(sseAsHttpApps),
-                })}
-              >
-                {t("mcpPage.drawer.sseAsHttpBody", {
-                  apps: appNames(sseAsHttpApps),
-                })}
-              </Notice>
-            )}
-            {sseRejectedApps.length > 0 && (
-              <Notice
-                tone="warning"
-                title={t("mcpPage.drawer.sseRejectedTitle", {
-                  apps: appNames(sseRejectedApps),
-                })}
-              >
-                {t("mcpPage.drawer.sseRejectedBody")}
-              </Notice>
-            )}
-          </div>
+          )}
 
           {!batch && (
             <div className="flex flex-col gap-3">

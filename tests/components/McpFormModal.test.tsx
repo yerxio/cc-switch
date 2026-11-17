@@ -35,7 +35,7 @@ vi.mock("@/hooks/useMcp", () => ({
   useUpsertMcpServer: () => ({ mutateAsync: mocks.upsert }),
 }));
 
-const ALL_ON = Object.fromEntries(APP_IDS_WITH.mcp.map((app) => [app, true]));
+const ALL_OFF = Object.fromEntries(APP_IDS_WITH.mcp.map((app) => [app, false]));
 
 function renderForm(
   props: Partial<React.ComponentProps<typeof McpFormModal>> = {},
@@ -71,8 +71,10 @@ describe("McpFormModal (drawer)", () => {
     expect(screen.getByLabelText("mcpPage.drawer.argAria")).toHaveValue("--x");
   });
 
-  it("adds a stdio server with every visible app ticked by default", async () => {
+  it("adds a stdio server without writing it to any app", async () => {
     const { onSave } = renderForm();
+    // 添加界面里没有「写入到」：写进哪些应用回到列表的矩阵里勾
+    expect(screen.queryByText("mcpPage.drawer.writeTo")).toBeNull();
     fireEvent.change(el("mcp-name"), {
       target: { value: "my-server" },
     });
@@ -94,8 +96,27 @@ describe("McpFormModal (drawer)", () => {
       name: "my-server",
       server: { type: "stdio", command: "uvx", args: ["mcp-server-fetch"] },
     });
-    expect(entry.apps).toMatchObject({ ...ALL_ON, openclaw: false });
+    // 只入库：一个应用都没启用
+    expect(entry.apps).toMatchObject({ ...ALL_OFF, openclaw: false });
+    // 提示里要说明还没写进任何应用，不然人会以为已经生效
+    expect(mocks.toastSuccess).toHaveBeenCalledWith(
+      "mcpPage.toast.added",
+      expect.objectContaining({ description: "mcpPage.toast.addedHint" }),
+    );
     expect(onSave).toHaveBeenCalled();
+  });
+
+  it("still offers the write-to choice when editing an existing server", () => {
+    renderForm({
+      editingId: "fetch",
+      initialData: {
+        id: "fetch",
+        name: "fetch",
+        server: { type: "stdio", command: "uvx" },
+        apps: { claude: true } as McpServer["apps"],
+      },
+    });
+    expect(screen.getByText("mcpPage.drawer.writeTo")).toBeInTheDocument();
   });
 
   it("shows field errors instead of saving when required fields are empty", async () => {
@@ -185,8 +206,10 @@ describe("McpFormModal (drawer)", () => {
     expect(mocks.upsert.mock.calls[0][0]).toMatchObject({ id: "linear" });
   });
 
-  it("keeps hidden apps' flags when overwriting an existing server from a batch", async () => {
-    // Hermes 从侧栏隐藏了：覆盖 figma 时它在 Hermes 的开关要原样带回，不能被当成关掉
+  it("keeps an existing server's app flags when a batch overwrites it", async () => {
+    // 添加界面没有「写入到」，表单里的勾选全是没人碰过的 false。批量粘贴覆盖 figma
+    // 时不能拿它去盖原值，否则 figma 会在它原本启用的应用里被关掉、从配置里删掉。
+    // 这里 figma 原本只在 Hermes 启用（Hermes 还从侧栏隐藏了），都要原样带回。
     renderForm({
       visibleAppIds: ["claude", "codex"],
       existingServers: {
@@ -218,11 +241,16 @@ describe("McpFormModal (drawer)", () => {
     const figma = mocks.upsert.mock.calls
       .map((call) => call[0])
       .find((entry) => entry.id === "figma");
-    expect(figma.apps).toMatchObject({
-      claude: true,
-      codex: true,
-      hermes: true,
-    });
+    expect(figma.apps).toMatchObject({ claude: false, hermes: true });
+    expect(figma.apps.codex).toBeFalsy();
+    // 换的是连接定义
+    expect(figma.server).toMatchObject({ url: "http://127.0.0.1:3845/v2" });
+
+    // 同一批里新加的 linear：一个应用都不启用
+    const linear = mocks.upsert.mock.calls
+      .map((call) => call[0])
+      .find((entry) => entry.id === "linear");
+    expect(linear.apps).toMatchObject({ ...ALL_OFF, openclaw: false });
   });
 
   it("masks secrets in the JSON tab and keeps them on save", async () => {
@@ -336,7 +364,17 @@ describe("McpFormModal (drawer)", () => {
   });
 
   it("follows the JSON tab when checking for SSE", async () => {
-    renderForm({ visibleAppIds: ["claude", "codex"] });
+    // SSE 的提示是针对「勾了哪些应用」的，跟着「写入到」只在编辑时出现
+    renderForm({
+      visibleAppIds: ["claude", "codex"],
+      editingId: "remote",
+      initialData: {
+        id: "remote",
+        name: "remote",
+        server: { type: "stdio", command: "uvx" },
+        apps: { claude: true, codex: true } as McpServer["apps"],
+      },
+    });
     expect(
       screen.queryByText("mcpPage.drawer.sseAsHttpTitle"),
     ).not.toBeInTheDocument();

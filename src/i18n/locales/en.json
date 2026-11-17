@@ -4869,6 +4869,7 @@
       "copiedOne": "Copied {{id}} as JSON (including env and header values)",
       "deleted": "Deleted {{id}}",
       "added": "Added {{id}}",
+      "addedHint": "Not written to any app yet. Tick the apps to write it to in the list.",
       "saved": "Saved {{id}}",
       "batchAdded": "Added {{count}} MCP servers",
       "batchAddedReplaced": "Added {{count}} MCP servers, replaced {{replaced}}",

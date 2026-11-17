@@ -4869,6 +4869,7 @@
       "copiedOne": "已复制 {{id}} 的 JSON（含环境变量和请求头的值）",
       "deleted": "已删除 {{id}}",
       "added": "已添加 {{id}}",
+      "addedHint": "尚未写入任何应用。在列表里勾选要写入的应用。",
       "saved": "已保存 {{id}}",
       "batchAdded": "已添加 {{count}} 个 MCP",
       "batchAddedReplaced": "已添加 {{count}} 个 MCP，覆盖 {{replaced}} 个",

@@ -4869,6 +4869,7 @@
       "copiedOne": "{{id}} の JSON をコピーしました（環境変数とヘッダーの値を含む）",
       "deleted": "{{id}} を削除しました",
       "added": "{{id}} を追加しました",
+      "addedHint": "まだどのアプリにも書き込まれていません。一覧で書き込み先のアプリにチェックを入れてください。",
       "saved": "{{id}} を保存しました",
       "batchAdded": "MCP を {{count}} 件追加しました",
       "batchAddedReplaced": "MCP を {{count}} 件追加、{{replaced}} 件を上書きしました",
