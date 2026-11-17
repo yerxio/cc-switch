@@ -1697,6 +1697,42 @@ fn migration_from_v26_adds_the_project_scope_tables() {
 }
 
 #[test]
+fn migration_from_v27_adds_the_skill_folder_tables() {
+    let conn = Connection::open_in_memory().expect("open memory db");
+    Database::create_tables_on_conn(&conn).expect("create tables");
+    conn.execute_batch(
+        "DROP TABLE skill_folder_items;
+         DROP TABLE skill_folders;
+         INSERT INTO skills (id, name, directory) VALUES ('local:a', 'A', 'a');",
+    )
+    .expect("seed v27 database");
+    Database::set_user_version(&conn, 27).expect("set user_version=27");
+
+    Database::apply_schema_migrations_on_conn(&conn).expect("upgrade v27 database");
+
+    assert_eq!(Database::get_user_version(&conn).unwrap(), SCHEMA_VERSION);
+    for table in ["skill_folders", "skill_folder_items"] {
+        let count: i64 = conn
+            .query_row(
+                "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = ?1",
+                [table],
+                |row| row.get(0),
+            )
+            .expect("query sqlite_master");
+        assert_eq!(count, 1, "{table} 应由 v28 迁移建出来");
+    }
+    // 归属单独成表：skills 表本身不该多出列，原有的行原样留着
+    let directory: String = conn
+        .query_row(
+            "SELECT directory FROM skills WHERE id = 'local:a'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("read skill row");
+    assert_eq!(directory, "a");
+}
+
+#[test]
 fn fresh_install_has_dsh_copilot_and_workbuddy_flags_at_current_version() {
     // 与 Database::init 的全新安装路径一致：先建表，再从 user_version=0 跑迁移。
     let conn = Connection::open_in_memory().expect("open memory db");

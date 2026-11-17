@@ -428,6 +428,30 @@ impl Database {
         )
         .map_err(|e| AppError::Database(e.to_string()))?;
 
+        // 21. Skill 文件夹：纯收纳视图。各工具只认扁平的 <skills>/<name>/SKILL.md，
+        //     所以文件夹不落盘，只记「哪个 Skill 归在哪个文件夹」。归属单独成表而不是
+        //     给 skills 加列：一个 Skill 最多一个文件夹（skill_id 作主键），且不必动
+        //     InstalledSkill 和它的几十处构造点。
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS skill_folders (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+                sort_order INTEGER NOT NULL DEFAULT 0,
+                created_at INTEGER NOT NULL DEFAULT 0
+            )",
+            [],
+        )
+        .map_err(|e| AppError::Database(e.to_string()))?;
+
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS skill_folder_items (
+                skill_id TEXT PRIMARY KEY,
+                folder_id TEXT NOT NULL
+            )",
+            [],
+        )
+        .map_err(|e| AppError::Database(e.to_string()))?;
+
         // 修复跑过未发布开发版的库：current 标记曾是全局 key，现按应用分组
         // （随 v12 定稿为 current_profile_id_<scope>，不单独 bump 版本）
         if conn
@@ -759,6 +783,11 @@ impl Database {
                         Self::migrate_v26_to_v27(conn)?;
                         Self::set_user_version(conn, 27)?;
                     }
+                    27 => {
+                        log::info!("迁移数据库从 v27 到 v28（Skill 文件夹）");
+                        Self::migrate_v27_to_v28(conn)?;
+                        Self::set_user_version(conn, 28)?;
+                    }
                     _ => {
                         return Err(AppError::Database(format!(
                             "未知的数据库版本 {version}，无法迁移到 {SCHEMA_VERSION}"
@@ -814,6 +843,30 @@ impl Database {
         )
         .map_err(|e| AppError::Database(e.to_string()))?;
 
+        Ok(())
+    }
+
+    /// v27 -> v28 迁移：Skill 文件夹的两张新表（只建表，不动 skills 的任何列）
+    fn migrate_v27_to_v28(conn: &Connection) -> Result<(), AppError> {
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS skill_folders (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+                sort_order INTEGER NOT NULL DEFAULT 0,
+                created_at INTEGER NOT NULL DEFAULT 0
+            )",
+            [],
+        )
+        .map_err(|e| AppError::Database(e.to_string()))?;
+
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS skill_folder_items (
+                skill_id TEXT PRIMARY KEY,
+                folder_id TEXT NOT NULL
+            )",
+            [],
+        )
+        .map_err(|e| AppError::Database(e.to_string()))?;
         Ok(())
     }
 

@@ -12,6 +12,7 @@ pub mod providers;
 pub mod providers_seed;
 pub mod proxy;
 pub mod settings;
+pub mod skill_folders;
 pub mod skills;
 pub mod stream_check;
 pub mod universal_providers;

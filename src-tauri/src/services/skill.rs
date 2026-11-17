@@ -8,7 +8,7 @@
 use anyhow::{anyhow, Context, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
@@ -289,6 +289,9 @@ pub struct ZipSkippedSkill {
 pub struct ZipInstallResult {
     pub installed: Vec<InstalledSkill>,
     pub skipped: Vec<ZipSkippedSkill>,
+    /// 这次导入用到的文件夹名（按 ZIP 里的层级或清单归的类）
+    #[serde(default)]
+    pub folders: Vec<String>,
 }
 
 /// 重新同步时某个 Skill 没同步成功
@@ -4849,6 +4852,10 @@ impl SkillService {
             )));
         }
 
+        // ZIP 里的层级（或导出时写的清单）决定每个 Skill 进哪个文件夹
+        let folder_hints = crate::services::skill_folder::infer_folders(temp_dir, &skill_dirs);
+        let mut folder_members: BTreeMap<String, Vec<String>> = BTreeMap::new();
+
         let _state_guard = skill_state_write_guard();
         let ssot_dir = Self::get_ssot_dir()?;
         let mut installed = Vec::new();
@@ -4980,10 +4987,33 @@ impl SkillService {
                     skill.name
                 ),
             }
+            if let Some(folder) = folder_hints.get(&skill_dir) {
+                folder_members
+                    .entry(folder.clone())
+                    .or_default()
+                    .push(skill.id.clone());
+            }
             installed.push(skill);
         }
 
-        Ok(ZipInstallResult { installed, skipped })
+        // 归类失败不该让已经装好的 Skill 算作失败：它们只是留在「未分类」
+        let mut folders = Vec::new();
+        for (folder, members) in folder_members {
+            let assigned = crate::services::skill_folder::SkillFolderService::ensure(db, &folder)
+                .and_then(|folder_id| db.assign_skills_to_folder(&members, Some(&folder_id)));
+            match assigned {
+                Ok(_) => folders.push(folder),
+                Err(error) => {
+                    log::warn!("ZIP 导入：把 Skill 归进文件夹 {folder} 失败: {error}")
+                }
+            }
+        }
+
+        Ok(ZipInstallResult {
+            installed,
+            skipped,
+            folders,
+        })
     }
 
     /// 解压本地 ZIP 文件到临时目录
