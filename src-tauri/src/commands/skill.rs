@@ -9,9 +9,10 @@ use crate::app_config::{AppType, InstalledSkill, UnmanagedSkill};
 use crate::error::format_skill_error;
 use crate::services::project_scope::ProjectScopeService;
 use crate::services::skill::{
-    DiscoverableSkill, ImportSkillSelection, MigrationResult, Skill, SkillAppSyncOutcome,
-    SkillBackupEntry, SkillDiscoveryResult, SkillRepo, SkillService, SkillStorageLocation,
-    SkillUninstallResult, SkillUpdateCheckResult, SkillsShSearchResult, ZipInstallResult,
+    BulkUninstallResult, DiscoverableSkill, ImportSkillSelection, MigrationResult, Skill,
+    SkillAppSyncOutcome, SkillBackupEntry, SkillDiscoveryResult, SkillRepo, SkillService,
+    SkillStorageLocation, SkillUninstallResult, SkillUpdateCheckResult, SkillsShSearchResult,
+    ZipInstallResult,
 };
 use crate::store::AppState;
 use std::str::FromStr;
@@ -100,6 +101,33 @@ pub async fn uninstall_skill_unified(
             log::warn!("卸载 Skill {id} 时清理项目级投影失败: {error}");
         }
         SkillService::uninstall(&state.db, &id).map_err(|e| e.to_string())
+    })
+    .await
+}
+
+/// 一次调用卸载一批 Skill，逐条返回成败。
+///
+/// 界面的多选卸载走这里而不是循环调 [`uninstall_skill_unified`]：后者每条一次
+/// IPC，界面每完成一条就要重画整表、重扫未管理的 Skill，一千多条时是平方级的。
+#[tauri::command]
+pub async fn uninstall_skills_bulk(
+    ids: Vec<String>,
+    app_state: State<'_, AppState>,
+) -> Result<BulkUninstallResult, String> {
+    run_db_task(&app_state, move |state| {
+        // 项目级投影只有少数条目才有：先读一次，循环里按需撤销
+        let bound = ProjectScopeService::bound_item_ids(&state.db, true).unwrap_or_else(|error| {
+            log::warn!("批量卸载：读取项目级绑定失败，跳过投影清理: {error}");
+            Default::default()
+        });
+        Ok(SkillService::uninstall_many(&state.db, &ids, |id| {
+            if !bound.contains(id) {
+                return;
+            }
+            if let Err(error) = ProjectScopeService::purge_item(&state.db, true, id) {
+                log::warn!("卸载 Skill {id} 时清理项目级投影失败: {error}");
+            }
+        }))
     })
     .await
 }

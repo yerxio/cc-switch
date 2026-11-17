@@ -5074,6 +5074,7 @@
       "installedMany": "스킬 {{count}}개를 설치하고 {{apps}}에서 활성화했습니다",
       "enableFailed": "{{apps}}에서 활성화하지 못했습니다. 목록에 표시했습니다",
       "uninstalledMany": "스킬 {{count}}개를 제거했습니다",
+      "uninstallFailedMany": "스킬 {{count}}개를 제거하지 못했습니다",
       "backupAt": "{{path}}에 백업했습니다",
       "copiedName": "스킬 이름을 복사했습니다: {{name}}",
       "openDirFailed": "폴더를 열지 못했습니다.",

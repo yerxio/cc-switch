@@ -18,6 +18,7 @@ const m = vi.hoisted(() => ({
   toggle: vi.fn(),
   bulkToggle: vi.fn(),
   uninstall: vi.fn(),
+  uninstallMany: vi.fn(),
   importSkills: vi.fn(),
   installFromZip: vi.fn(),
   deleteBackup: vi.fn(),
@@ -43,6 +44,22 @@ const m = vi.hoisted(() => ({
   selectScope: vi.fn(),
   toggleProjectSkill: vi.fn(),
   resyncProject: vi.fn(),
+}));
+
+// jsdom 没有布局，虚拟列表一条都不渲染；这里让它把全部条目都画出来
+vi.mock("@tanstack/react-virtual", () => ({
+  useVirtualizer: ({ count }: { count: number }) => ({
+    getTotalSize: () => count * 56,
+    getVirtualItems: () =>
+      Array.from({ length: count }, (_, index) => ({
+        index,
+        key: index,
+        start: 44 + index * 56,
+      })),
+    measure: () => undefined,
+    measureElement: () => undefined,
+    scrollToIndex: () => undefined,
+  }),
 }));
 
 vi.mock("sonner", () => ({
@@ -91,6 +108,10 @@ vi.mock("@/hooks/useSkills", () => ({
     isPending: false,
   }),
   useUninstallSkill: () => ({ mutateAsync: m.uninstall, isPending: false }),
+  useUninstallSkills: () => ({
+    mutateAsync: m.uninstallMany,
+    isPending: false,
+  }),
   useScanUnmanagedSkills: () => ({
     data: [
       {
@@ -222,6 +243,7 @@ describe("UnifiedSkillsPanel", () => {
       .mockReset()
       .mockImplementation(async ({ ids }) => ({ succeeded: ids, failed: [] }));
     m.uninstall.mockReset().mockResolvedValue({});
+    m.uninstallMany.mockReset().mockResolvedValue({ succeeded: [], failed: [] });
     m.importSkills.mockReset().mockResolvedValue([]);
     m.deleteBackup.mockReset();
     m.restoreBackup.mockReset();
@@ -1253,4 +1275,51 @@ describe("UnifiedSkillsPanel", () => {
     );
   });
 
+
+  it("uninstalls a multi-selection with one bulk call instead of one call per Skill", async () => {
+    m.installed = [
+      makeSkill({ id: "local:a", name: "A", directory: "a" }),
+      makeSkill({ id: "local:b", name: "B", directory: "b" }),
+      makeSkill({ id: "local:c", name: "C", directory: "c" }),
+    ];
+    m.uninstallMany.mockResolvedValueOnce({
+      succeeded: [{ id: "local:a" }, { id: "local:b" }],
+      failed: [{ id: "local:c", error: "disk is read-only" }],
+    });
+    renderPanel();
+
+    await userEvent.click(
+      screen.getByRole("checkbox", { name: "skillsPage.selectAllAria" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "skillsPage.bulk.uninstall" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", {
+        name: "skillsPage.confirm.uninstallManyButton",
+      }),
+    );
+
+    // 一次批量调用带上全部 id；逐条的那个 mutation 一次都不该碰
+    await waitFor(() => expect(m.uninstallMany).toHaveBeenCalledTimes(1));
+    expect(m.uninstallMany.mock.calls[0][0]).toEqual(
+      expect.arrayContaining(["local:a", "local:b", "local:c"]),
+    );
+    expect(m.uninstall).not.toHaveBeenCalled();
+
+    // 成功的按数量汇报，失败的汇成一条而不是每条一个 toast
+    await waitFor(() =>
+      expect(m.toastSuccess).toHaveBeenCalledWith(
+        "skillsPage.toast.uninstalledMany",
+        expect.anything(),
+      ),
+    );
+    expect(m.toastError).toHaveBeenCalledTimes(1);
+    expect(m.toastError).toHaveBeenCalledWith(
+      "skillsPage.toast.uninstallFailedMany",
+      expect.objectContaining({
+        description: expect.stringContaining("disk is read-only"),
+      }),
+    );
+  });
 });

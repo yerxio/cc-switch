@@ -268,6 +268,40 @@ export function useUninstallSkill() {
   });
 }
 
+/**
+ * 批量卸载：一次 IPC，缓存只改一次，收尾的失效也只发一次。
+ *
+ * 与 [`useUninstallSkill`] 的区别全在次数上——那个每条都改一次缓存、失效一次
+ * 「未管理」扫描，放进循环里就是每卸一条重画一遍整张表。
+ */
+export function useUninstallSkills() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (ids: string[]) => skillsApi.uninstallMany(ids),
+    onSuccess: (result) => {
+      const gone = new Set(result.succeeded.map((item) => item.id));
+      if (gone.size === 0) return;
+      queryClient.setQueryData<InstalledSkill[]>(
+        ["skills", "installed"],
+        (oldData) => oldData?.filter((skill) => !gone.has(skill.id)),
+      );
+      queryClient.setQueryData<SkillUpdateCheckResult>(
+        ["skills", "updates"],
+        (oldData) =>
+          oldData && {
+            ...oldData,
+            updates: oldData.updates.filter((update) => !gone.has(update.id)),
+          },
+      );
+    },
+    onSettled: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["skills", "backups"] }),
+        queryClient.invalidateQueries({ queryKey: ["skills", "unmanaged"] }),
+      ]),
+  });
+}
+
 export function useRestoreSkillBackup() {
   const queryClient = useQueryClient();
   return useMutation({

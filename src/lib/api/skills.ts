@@ -61,6 +61,17 @@ export interface SkillUninstallResult {
   piCleanupIncomplete?: boolean;
 }
 
+/** 批量卸载里成功的一条（卸载结果的字段平铺在同一层） */
+export interface BulkUninstalled extends SkillUninstallResult {
+  id: string;
+}
+
+/** 批量卸载的结果：逐条给出成败，一条失败不拖累其余 */
+export interface BulkUninstallResult {
+  succeeded: BulkUninstalled[];
+  failed: { id: string; error: string }[];
+}
+
 export interface SkillBackupEntry {
   backupId: string;
   backupPath: string;
@@ -230,6 +241,16 @@ export const skillsApi = {
   /** 卸载 Skill（统一卸载） */
   async uninstallUnified(id: string): Promise<SkillUninstallResult> {
     return await invoke("uninstall_skill_unified", { id });
+  },
+
+  /**
+   * 一次调用卸载一批。
+   *
+   * 多选卸载必须走这个而不是循环调 `uninstallUnified`：逐条调用时界面每完成一条
+   * 就重画整表、重扫未管理的 Skill，一千多条是平方级的（实测 24 分钟）。
+   */
+  async uninstallMany(ids: string[]): Promise<BulkUninstallResult> {
+    return await invoke("uninstall_skills_bulk", { ids });
   },
 
   /** 从备份恢复 Skill */

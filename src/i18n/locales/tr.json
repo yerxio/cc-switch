@@ -5008,6 +5008,7 @@
       "installedMany": "{{count}} Becerileri yüklendi ve {{apps}}'de etkinleştirildi",
       "enableFailed": "{{apps}}'de etkinleştirilemedi; listede işaretlendi",
       "uninstalledMany": "Kaldırılan {{count}} Becerileri",
+      "uninstallFailedMany": "{{count}} Beceri kaldırılamadı",
       "backupAt": "{{path}}'ye yedeklendi",
       "copiedName": "{{name}} kopyalandı",
       "openDirFailed": "Klasör açılamadı",

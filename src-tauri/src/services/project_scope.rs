@@ -614,6 +614,23 @@ impl ProjectScopeService {
         Ok(report)
     }
 
+    /// 在项目里有绑定的条目 id 集合。
+    ///
+    /// 批量卸载用：绝大多数 Skill 没绑过任何项目，先读一次全表，循环里只对集合内的
+    /// 条目做 [`Self::purge_item`]，而不是每条都把绑定表扫一遍。
+    pub fn bound_item_ids(
+        db: &Arc<Database>,
+        kind_is_skill: bool,
+    ) -> Result<BTreeSet<String>, AppError> {
+        let kind = if kind_is_skill { KIND_SKILL } else { KIND_MCP };
+        Ok(db
+            .list_all_project_bindings()?
+            .into_iter()
+            .filter(|binding| binding.kind == kind)
+            .map(|binding| binding.item_id)
+            .collect())
+    }
+
     /// 条目在全局被卸载时，连带把它在各项目里的投影和绑定一并撤掉
     pub fn purge_item(
         db: &Arc<Database>,

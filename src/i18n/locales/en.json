@@ -5074,6 +5074,7 @@
       "installedMany": "Installed {{count}} Skills and enabled them in {{apps}}",
       "enableFailed": "Couldn't enable in {{apps}}; marked in the list",
       "uninstalledMany": "Uninstalled {{count}} Skills",
+      "uninstallFailedMany": "{{count}} Skills could not be uninstalled",
       "backupAt": "Backed up to {{path}}",
       "copiedName": "Copied {{name}}",
       "openDirFailed": "Couldn't open the folder",

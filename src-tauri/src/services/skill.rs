@@ -206,6 +206,31 @@ fn is_false(value: &bool) -> bool {
     !*value
 }
 
+/// 批量卸载里成功的一条
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BulkUninstalled {
+    pub id: String,
+    #[serde(flatten)]
+    pub result: SkillUninstallResult,
+}
+
+/// 批量卸载里失败的一条
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BulkUninstallFailure {
+    pub id: String,
+    pub error: String,
+}
+
+/// 批量卸载的结果：逐条给出成败，一条失败不拖累其余
+#[derive(Debug, Clone, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BulkUninstallResult {
+    pub succeeded: Vec<BulkUninstalled>,
+    pub failed: Vec<BulkUninstallFailure>,
+}
+
 /// Skill 更新检测结果
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -1084,6 +1109,44 @@ impl SkillService {
         );
 
         Ok(installed_skill)
+    }
+
+    /// 卸载一批 Skill，逐条报告成败。
+    ///
+    /// 每条仍走 [`Self::uninstall`]（备份、清理各应用目录、删库行的顺序和守卫都不变），
+    /// 批量的意义在调用方：界面曾经逐条发 IPC，每完成一条就重画整张表、重扫一遍
+    /// 未管理的 Skill，一千多条时是平方级的 24 分钟。合成一次调用后这些都只做一遍。
+    ///
+    /// `before_each` 在每条卸载**之前**调用，给调用方留出需要读库行才能做的清理
+    /// （项目级投影要靠 skills 表里的目录名撤销，删行之后就查不到了）。
+    pub fn uninstall_many(
+        db: &Arc<Database>,
+        ids: &[String],
+        mut before_each: impl FnMut(&str),
+    ) -> BulkUninstallResult {
+        let mut outcome = BulkUninstallResult::default();
+        for id in ids {
+            before_each(id);
+            match Self::uninstall(db, id) {
+                Ok(result) => outcome.succeeded.push(BulkUninstalled {
+                    id: id.clone(),
+                    result,
+                }),
+                Err(error) => {
+                    log::warn!("批量卸载：Skill {id} 失败: {error:#}");
+                    outcome.failed.push(BulkUninstallFailure {
+                        id: id.clone(),
+                        error: format!("{error:#}"),
+                    });
+                }
+            }
+        }
+        log::info!(
+            "批量卸载完成：成功 {}，失败 {}",
+            outcome.succeeded.len(),
+            outcome.failed.len()
+        );
+        outcome
     }
 
     /// 卸载 Skill
@@ -8828,6 +8891,82 @@ mod tests {
                     app_dir.display()
                 );
             }
+        }
+    }
+
+    /// 批量卸载逐条报告成败：一条不存在不拖累其余，`before_each` 在每条删行之前
+    /// 被调用（项目级投影要靠还在库里的目录名撤销）。
+    #[test]
+    #[serial_test::serial]
+    fn uninstall_many_reports_each_outcome_and_runs_the_hook_before_the_row_goes() {
+        let home = tempdir().expect("home");
+        let _home = TestHomeGuard::set(home.path());
+        let db = Arc::new(Database::memory().expect("memory db"));
+        let ssot = SkillService::get_ssot_dir().expect("ssot dir");
+
+        for directory in ["alpha", "beta", "gamma"] {
+            write_skill(&ssot.join(directory), directory);
+            db.save_skill(&InstalledSkill {
+                id: format!("local:{directory}"),
+                name: directory.to_string(),
+                description: None,
+                directory: directory.to_string(),
+                repo_owner: None,
+                repo_name: None,
+                repo_branch: None,
+                readme_url: None,
+                apps: SkillApps::default(),
+                installed_at: 0,
+                content_hash: None,
+                updated_at: 0,
+            })
+            .expect("save skill");
+        }
+
+        let ids: Vec<String> = ["local:alpha", "local:missing", "local:beta", "local:gamma"]
+            .iter()
+            .map(|id| id.to_string())
+            .collect();
+
+        // 钩子被调用的那一刻，对应的库行必须还在
+        let mut seen_with_row = Vec::new();
+        let outcome = SkillService::uninstall_many(&db, &ids, |id| {
+            let present = db.get_installed_skill(id).expect("lookup").is_some();
+            seen_with_row.push((id.to_string(), present));
+        });
+
+        assert_eq!(
+            outcome
+                .succeeded
+                .iter()
+                .map(|item| item.id.as_str())
+                .collect::<Vec<_>>(),
+            ["local:alpha", "local:beta", "local:gamma"],
+            "成功的按调用顺序给出"
+        );
+        assert_eq!(outcome.failed.len(), 1, "不存在的那条单独报失败");
+        assert_eq!(outcome.failed[0].id, "local:missing");
+
+        assert_eq!(
+            seen_with_row,
+            [
+                ("local:alpha".to_string(), true),
+                ("local:missing".to_string(), false),
+                ("local:beta".to_string(), true),
+                ("local:gamma".to_string(), true),
+            ],
+            "钩子在删行之前逐条调用"
+        );
+
+        assert!(
+            db.get_all_installed_skills().expect("read back").is_empty(),
+            "三条都应已从库里删掉"
+        );
+        for directory in ["alpha", "beta", "gamma"] {
+            assert!(
+                !ssot.join(directory).exists(),
+                "{directory} 的 SSOT 副本应已移除"
+            );
         }
     }
 

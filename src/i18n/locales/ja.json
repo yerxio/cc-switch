@@ -5074,6 +5074,7 @@
       "installedMany": "{{count}} 件の Skill をインストールし、{{apps}} で有効にしました",
       "enableFailed": "{{apps}} で有効にできませんでした。リストに印を付けました",
       "uninstalledMany": "{{count}} 件の Skill をアンインストールしました",
+      "uninstallFailedMany": "{{count}} 個の Skill をアンインストールできませんでした",
       "backupAt": "バックアップ先：{{path}}",
       "copiedName": "{{name}} をコピーしました",
       "openDirFailed": "フォルダーを開けませんでした",

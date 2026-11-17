@@ -5074,6 +5074,7 @@
       "installedMany": "已安裝 {{count}} 個 Skill，並在 {{apps}} 啟用",
       "enableFailed": "沒能在 {{apps}} 啟用，已在列表裡標出",
       "uninstalledMany": "已解除安裝 {{count}} 個 Skill",
+      "uninstallFailedMany": "有 {{count}} 個 Skill 沒有解除安裝成功",
       "backupAt": "備份在 {{path}}",
       "copiedName": "已複製 {{name}}",
       "openDirFailed": "無法開啟資料夾",

@@ -1,5 +1,6 @@
 import { createPortal } from "react-dom";
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { useDelayedFlag } from "@/hooks/useDelayedFlag";
 import { useTranslation } from "react-i18next";
 import {
@@ -47,11 +48,13 @@ import {
   useSkillBackups,
   useSkillRepos,
   useToggleSkillApp,
+  useUninstallSkills,
   useUninstallSkill,
   useUpdateSkill,
 } from "@/hooks/useSkills";
 import type { AppId } from "@/lib/api/types";
 import { settingsApi, skillsApi } from "@/lib/api";
+import type { SkillUninstallResult } from "@/lib/api/skills";
 import { copyText } from "@/lib/clipboard";
 import { extractErrorMessage } from "@/utils/errorUtils";
 import { cn } from "@/lib/utils";
@@ -84,6 +87,9 @@ import {
 } from "@/hooks/useProjectScope";
 
 const BACKUP_DIR = "~/.cc-switch/skill-backups";
+/** 已安装列表的行高（InstalledRow 的 h-14）与表头高（h-11），虚拟化按这两个数算 */
+const INSTALLED_ROW_HEIGHT = 56;
+const MATRIX_HEADER_HEIGHT = 44;
 
 // 表格最小宽度 = 勾选框 + 名称栏保底 + 每个应用一列（MatrixCell 的 w-9）+ 行尾「⋯」（w-10）+ 左右内边距
 const NAME_MIN_WIDTH = 240;
@@ -196,6 +202,7 @@ const UnifiedSkillsPanel: React.FC<UnifiedSkillsPanelProps> = ({
   const toggleAppMutation = useToggleSkillApp();
   const bulkToggleAppMutation = useBulkToggleSkillApp();
   const uninstallMutation = useUninstallSkill();
+  const uninstallManyMutation = useUninstallSkills();
   const restoreBackupMutation = useRestoreSkillBackup();
   // 进入页面时静默扫描一次「本机已有但未管理」的 Skill
   const { data: unmanagedSkills, refetch: scanUnmanaged } =
@@ -218,6 +225,7 @@ const UnifiedSkillsPanel: React.FC<UnifiedSkillsPanelProps> = ({
     toggleAppMutation.isPending ||
     bulkToggleAppMutation.isPending ||
     uninstallMutation.isPending ||
+    uninstallManyMutation.isPending ||
     restoreBackupMutation.isPending ||
     importMutation.isPending ||
     installFromZipMutation.isPending ||
@@ -395,13 +403,34 @@ const UnifiedSkillsPanel: React.FC<UnifiedSkillsPanelProps> = ({
     if (next.size !== selected.size) setSelected(next);
   }, [installedSkills, selected]);
 
-  // 从「发现」跳回来时定位到那一行
+  // 已安装列表虚拟化：上千行时只画可视区域和前后各几行（每行固定 56）。
+  // 不虚拟化的话每次勾选、每次卸载都要重画全部行 × 全部应用列。
+  const matrixScrollRef = useRef<HTMLDivElement>(null);
+  const rowVirtualizer = useVirtualizer({
+    count: filteredSkills.length,
+    getScrollElement: () => matrixScrollRef.current,
+    estimateSize: () => INSTALLED_ROW_HEIGHT,
+    getItemKey: (index) => filteredSkills[index]?.id ?? index,
+    // 表头钉在同一个滚动容器里，行从它下面开始
+    scrollMargin: MATRIX_HEADER_HEIGHT,
+    overscan: 8,
+  });
+
+  // 从「发现」跳回来时定位到那一行。那一行可能在可视区域外、还没被画出来，
+  // 所以先让虚拟列表滚过去，下一帧再聚焦。
   useEffect(() => {
     if (!highlightId || view !== "installed") return;
-    const row = document.getElementById(`sk-row-${highlightId}`);
-    row?.scrollIntoView?.({ block: "center" });
-    row?.focus?.({ preventScroll: true });
-  }, [highlightId, view]);
+    const index = filteredSkills.findIndex((skill) => skill.id === highlightId);
+    if (index < 0) return;
+    rowVirtualizer.scrollToIndex(index, { align: "center" });
+    const frame = requestAnimationFrame(() => {
+      document
+        .getElementById(`sk-row-${highlightId}`)
+        ?.focus?.({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(frame);
+    // rowVirtualizer 每次渲染都是新对象，放进依赖会让这个 effect 每帧重跑
+  }, [highlightId, view, filteredSkills]);
 
   // 在「发现」段按 Escape 回到「已安装」
   useEffect(() => {
@@ -561,24 +590,53 @@ const UnifiedSkillsPanel: React.FC<UnifiedSkillsPanelProps> = ({
     const done: InstalledSkill[] = [];
     let piWarning: string | undefined;
     let backupPath: string | undefined;
+    const byId = new Map(installedSkills.map((item) => [item.id, item]));
+    const noteResult = (id: string, result: SkillUninstallResult) => {
+      const skill = byId.get(id);
+      if (skill) done.push(skill);
+      if (result.preservedPiPath) {
+        piWarning = t("skills.uninstallPiPreserved", {
+          path: result.preservedPiPath,
+        });
+      } else if (result.piCleanupIncomplete) {
+        piWarning = t("skills.uninstallPiCleanupIncomplete");
+      }
+      if (result.backupPath) backupPath = result.backupPath;
+    };
     try {
-      for (const id of ids) {
-        const skill = installedSkills.find((item) => item.id === id);
+      if (ids.length === 1) {
+        const [id] = ids;
         try {
-          const result = await uninstallMutation.mutateAsync(id);
-          if (skill) done.push(skill);
-          if (result.preservedPiPath) {
-            piWarning = t("skills.uninstallPiPreserved", {
-              path: result.preservedPiPath,
-            });
-          } else if (result.piCleanupIncomplete) {
-            piWarning = t("skills.uninstallPiCleanupIncomplete");
-          }
-          if (result.backupPath) backupPath = result.backupPath;
+          noteResult(id, await uninstallMutation.mutateAsync(id));
         } catch (error) {
           toast.error(t("common.error"), {
-            description: `${skill?.name ?? id}: ${String(error)}`,
+            description: `${byId.get(id)?.name ?? id}: ${String(error)}`,
           });
+        }
+      } else {
+        // 多选走一次批量调用：逐条调用时每完成一条就重画整表、重扫未管理的
+        // Skill，一千多条是平方级的（实测 24 分钟）。
+        try {
+          const result = await uninstallManyMutation.mutateAsync(ids);
+          for (const item of result.succeeded) noteResult(item.id, item);
+          if (result.failed.length > 0) {
+            // 失败可能有几百条，一条 toast 汇总，不刷屏
+            const shown = result.failed
+              .slice(0, 3)
+              .map(
+                (failure) =>
+                  `${byId.get(failure.id)?.name ?? failure.id}: ${failure.error}`,
+              )
+              .join("\n");
+            toast.error(
+              t("skillsPage.toast.uninstallFailedMany", {
+                count: result.failed.length,
+              }),
+              { description: shown, closeButton: true },
+            );
+          }
+        } catch (error) {
+          toast.error(t("common.error"), { description: String(error) });
         }
       }
       setConfirm(null);
@@ -1134,8 +1192,23 @@ const UnifiedSkillsPanel: React.FC<UnifiedSkillsPanelProps> = ({
     ).length;
     const allVisibleSelected =
       filteredSkills.length > 0 && nVisibleSelected === filteredSkills.length;
+    const virtualRows = rowVirtualizer.getVirtualItems();
+    const firstRow = virtualRows[0];
+    const lastRow = virtualRows[virtualRows.length - 1];
+    const virtualPadTop = firstRow
+      ? Math.max(0, firstRow.start - MATRIX_HEADER_HEIGHT)
+      : 0;
+    const virtualPadBottom = lastRow
+      ? Math.max(
+          0,
+          rowVirtualizer.getTotalSize() -
+            (lastRow.start - MATRIX_HEADER_HEIGHT) -
+            INSTALLED_ROW_HEIGHT,
+        )
+      : 0;
     return (
       <div
+        ref={matrixScrollRef}
         data-testid="skills-matrix"
         className="min-h-0 overflow-auto scroll-stable rounded-panel border border-border bg-surface"
       >
@@ -1281,56 +1354,66 @@ const UnifiedSkillsPanel: React.FC<UnifiedSkillsPanelProps> = ({
               <ul
                 aria-label={t("skillsPage.listLabel")}
                 className="m-0 list-none p-0"
+                // 没画出来的行用上下留白顶住高度：行仍在正常文档流里，钉在左边的
+                // 名称栏和行间分隔线都不用改
+                style={{
+                  paddingTop: virtualPadTop,
+                  paddingBottom: virtualPadBottom,
+                }}
               >
-                {filteredSkills.map((skill, index) => (
-                  <InstalledRow
-                    key={skill.id}
-                    skill={skill}
-                    first={index === 0}
-                    appIds={appIds}
-                    checked={selected.has(skill.id)}
-                    hasUpdate={Boolean(updatesMap[skill.id])}
-                    isUpdating={
-                      updateSkillMutation.isPending &&
-                      updateSkillMutation.variables === skill.id
-                    }
-                    highlighted={highlightId === skill.id}
-                    onHighlightDone={() => setHighlightId(null)}
-                    fails={fails}
-                    disabled={controlsDisabled}
-                    sourceText={
-                      skill.repoOwner && skill.repoName
-                        ? `${skill.repoOwner}/${skill.repoName}`
-                        : t("skillsPage.source.local")
-                    }
-                    onPick={(checked) =>
-                      setSelected((prev) => {
-                        const next = new Set(prev);
-                        if (checked) next.add(skill.id);
-                        else next.delete(skill.id);
-                        return next;
-                      })
-                    }
-                    onCell={(app) => {
-                      const failure = fails[failKey(skill.id, app)];
-                      void writeOne(
-                        skill.id,
-                        app,
-                        failure ? failure.desired : !skill.apps[app],
-                      );
-                    }}
-                    onOpenSource={() => void openDocs(skill)}
-                    onFixSync={() => setStorageOpen(true)}
-                    onUpdate={() => void updateIds([skill.id])}
-                    onOpenDocs={() => void openDocs(skill)}
-                    onCopyName={() => void copyName(skill)}
-                    onOpenDir={() => void openDirectory(skill)}
-                    onUninstall={() => {
-                      if (writeLockRef.current || interactionBlocked) return;
-                      setConfirm({ kind: "uninstall", ids: [skill.id] });
-                    }}
-                  />
-                ))}
+                {virtualRows.map(({ index }) => {
+                  const skill = filteredSkills[index];
+                  if (!skill) return null;
+                  return (
+                    <InstalledRow
+                      key={skill.id}
+                      skill={skill}
+                      first={index === 0}
+                      appIds={appIds}
+                      checked={selected.has(skill.id)}
+                      hasUpdate={Boolean(updatesMap[skill.id])}
+                      isUpdating={
+                        updateSkillMutation.isPending &&
+                        updateSkillMutation.variables === skill.id
+                      }
+                      highlighted={highlightId === skill.id}
+                      onHighlightDone={() => setHighlightId(null)}
+                      fails={fails}
+                      disabled={controlsDisabled}
+                      sourceText={
+                        skill.repoOwner && skill.repoName
+                          ? `${skill.repoOwner}/${skill.repoName}`
+                          : t("skillsPage.source.local")
+                      }
+                      onPick={(checked) =>
+                        setSelected((prev) => {
+                          const next = new Set(prev);
+                          if (checked) next.add(skill.id);
+                          else next.delete(skill.id);
+                          return next;
+                        })
+                      }
+                      onCell={(app) => {
+                        const failure = fails[failKey(skill.id, app)];
+                        void writeOne(
+                          skill.id,
+                          app,
+                          failure ? failure.desired : !skill.apps[app],
+                        );
+                      }}
+                      onOpenSource={() => void openDocs(skill)}
+                      onFixSync={() => setStorageOpen(true)}
+                      onUpdate={() => void updateIds([skill.id])}
+                      onOpenDocs={() => void openDocs(skill)}
+                      onCopyName={() => void copyName(skill)}
+                      onOpenDir={() => void openDirectory(skill)}
+                      onUninstall={() => {
+                        if (writeLockRef.current || interactionBlocked) return;
+                        setConfirm({ kind: "uninstall", ids: [skill.id] });
+                      }}
+                    />
+                  );
+                })}
               </ul>
             )}
           </div>

@@ -5074,6 +5074,7 @@
       "installedMany": "{{count}} Skills installiert und in {{apps}} aktiviert",
       "enableFailed": "Aktivieren in {{apps}} fehlgeschlagen; in der Liste markiert",
       "uninstalledMany": "{{count}} Skills deinstalliert",
+      "uninstallFailedMany": "{{count}} Skills konnten nicht deinstalliert werden",
       "backupAt": "Gesichert unter {{path}}",
       "copiedName": "{{name}} kopiert",
       "openDirFailed": "Der Ordner konnte nicht geöffnet werden",

@@ -5072,6 +5072,7 @@
       "installedMany": "Установлено навыков: {{count}}, включены в {{apps}}",
       "enableFailed": "Не удалось включить в {{apps}}; отмечено в списке",
       "uninstalledMany": "Удалено навыков: {{count}}",
+      "uninstallFailedMany": "Не удалось удалить навыков: {{count}}",
       "backupAt": "Резервная копия: {{path}}",
       "copiedName": "Скопировано: {{name}}",
       "openDirFailed": "Не удалось открыть каталог",
